@@ -1,3 +1,6 @@
+import { calculateSettlement } from '../../../src/services/budgetService';
+import type { BudgetItem, BudgetItemMember } from '../../../src/types';
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ── DB mock setup ────────────────────────────────────────────────────────────
@@ -29,16 +32,18 @@ const mockDb = vi.hoisted(() => {
 
 vi.mock('../../../src/db/database', () => mockDb);
 
-import { calculateSettlement } from '../../../src/services/budgetService';
-import type { BudgetItem, BudgetItemMember } from '../../../src/types';
-
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
 function makeItem(id: number, total_price: number, trip_id = 1): BudgetItem {
   return { id, trip_id, name: `Item ${id}`, total_price, category: 'Other' } as BudgetItem;
 }
 
-function makeMember(budget_item_id: number, user_id: number, paid: boolean | 0 | 1, username: string): BudgetItemMember & { budget_item_id: number } {
+function makeMember(
+  budget_item_id: number,
+  user_id: number,
+  paid: boolean | 0 | 1,
+  username: string,
+): BudgetItemMember & { budget_item_id: number } {
   return {
     budget_item_id,
     user_id,
@@ -82,28 +87,22 @@ describe('calculateSettlement', () => {
   });
 
   it('returns no flows when no one is marked as paid', () => {
-    setupDb(
-      [makeItem(1, 100)],
-      [makeMember(1, 1, 0, 'alice'), makeMember(1, 2, 0, 'bob')],
-    );
+    setupDb([makeItem(1, 100)], [makeMember(1, 1, 0, 'alice'), makeMember(1, 2, 0, 'bob')]);
     const result = calculateSettlement(1);
     expect(result.flows).toEqual([]);
   });
 
   it('2 members, 1 payer: payer is owed half, non-payer owes half', () => {
     // Item: $100. Alice paid, Bob did not. Each owes $50. Alice net: +$50. Bob net: -$50.
-    setupDb(
-      [makeItem(1, 100)],
-      [makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 0, 'bob')],
-    );
+    setupDb([makeItem(1, 100)], [makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 0, 'bob')]);
     const result = calculateSettlement(1);
-    const alice = result.balances.find(b => b.user_id === 1)!;
-    const bob = result.balances.find(b => b.user_id === 2)!;
+    const alice = result.balances.find((b) => b.user_id === 1)!;
+    const bob = result.balances.find((b) => b.user_id === 2)!;
     expect(alice.balance).toBe(50);
     expect(bob.balance).toBe(-50);
     expect(result.flows).toHaveLength(1);
     expect(result.flows[0].from.user_id).toBe(2); // Bob owes
-    expect(result.flows[0].to.user_id).toBe(1);   // Alice is owed
+    expect(result.flows[0].to.user_id).toBe(1); // Alice is owed
     expect(result.flows[0].amount).toBe(50);
   });
 
@@ -114,9 +113,9 @@ describe('calculateSettlement', () => {
       [makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 0, 'bob'), makeMember(1, 3, 0, 'carol')],
     );
     const result = calculateSettlement(1);
-    const alice = result.balances.find(b => b.user_id === 1)!;
-    const bob = result.balances.find(b => b.user_id === 2)!;
-    const carol = result.balances.find(b => b.user_id === 3)!;
+    const alice = result.balances.find((b) => b.user_id === 1)!;
+    const bob = result.balances.find((b) => b.user_id === 2)!;
+    const carol = result.balances.find((b) => b.user_id === 3)!;
     expect(alice.balance).toBe(60);
     expect(bob.balance).toBe(-30);
     expect(carol.balance).toBe(-30);
@@ -140,14 +139,11 @@ describe('calculateSettlement', () => {
 
   it('flow direction: from is debtor (owes), to is creditor (is owed)', () => {
     // Alice paid $100 for 2 people. Bob owes Alice $50.
-    setupDb(
-      [makeItem(1, 100)],
-      [makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 0, 'bob')],
-    );
+    setupDb([makeItem(1, 100)], [makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 0, 'bob')]);
     const result = calculateSettlement(1);
     const flow = result.flows[0];
-    expect(flow.from.username).toBe('bob');   // debtor
-    expect(flow.to.username).toBe('alice');   // creditor
+    expect(flow.from.username).toBe('bob'); // debtor
+    expect(flow.to.username).toBe('alice'); // creditor
   });
 
   it('amounts are rounded to 2 decimal places', () => {
@@ -176,13 +172,15 @@ describe('calculateSettlement', () => {
     setupDb(
       [makeItem(1, 100), makeItem(2, 60)],
       [
-        makeMember(1, 1, 1, 'alice'), makeMember(1, 2, 0, 'bob'),
-        makeMember(2, 1, 0, 'alice'), makeMember(2, 2, 1, 'bob'),
+        makeMember(1, 1, 1, 'alice'),
+        makeMember(1, 2, 0, 'bob'),
+        makeMember(2, 1, 0, 'alice'),
+        makeMember(2, 2, 1, 'bob'),
       ],
     );
     const result = calculateSettlement(1);
-    const alice = result.balances.find(b => b.user_id === 1)!;
-    const bob = result.balances.find(b => b.user_id === 2)!;
+    const alice = result.balances.find((b) => b.user_id === 1)!;
+    const bob = result.balances.find((b) => b.user_id === 2)!;
     expect(alice.balance).toBe(20);
     expect(bob.balance).toBe(-20);
     expect(result.flows).toHaveLength(1);

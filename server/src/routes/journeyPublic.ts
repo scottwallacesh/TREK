@@ -1,9 +1,14 @@
-import express, { Request, Response } from 'express';
-import { getPublicJourney, validateShareTokenForAsset, validateShareTokenForPhoto } from '../services/journeyShareService';
-import { streamPhoto } from '../services/memories/photoResolverService';
+import {
+  getPublicJourney,
+  validateShareTokenForAsset,
+  validateShareTokenForPhoto,
+} from '../services/journeyShareService';
 import { streamImmichAsset } from '../services/memories/immichService';
-import path from 'node:path';
+import { streamPhoto } from '../services/memories/photoResolverService';
+
+import express, { Request, Response } from 'express';
 import fs from 'node:fs';
+import path from 'node:path';
 
 const router = express.Router();
 
@@ -42,11 +47,23 @@ router.get('/:token/photo/:provider/:assetId/:ownerId/:kind', async (req: Reques
 
   const effectiveOwnerId = valid.ownerId || Number(ownerId);
   if (provider === 'immich') {
-    await streamImmichAsset(res, effectiveOwnerId, assetId, kind === 'thumbnail' ? 'thumbnail' : 'original', effectiveOwnerId);
+    await streamImmichAsset(
+      res,
+      effectiveOwnerId,
+      assetId,
+      kind === 'thumbnail' ? 'thumbnail' : 'original',
+      effectiveOwnerId,
+    );
   } else {
     try {
       const { streamSynologyAsset } = await import('../services/memories/synologyService');
-      await streamSynologyAsset(res, effectiveOwnerId, effectiveOwnerId, assetId, kind === 'thumbnail' ? 'thumbnail' : 'original');
+      await streamSynologyAsset(
+        res,
+        effectiveOwnerId,
+        effectiveOwnerId,
+        assetId,
+        kind === 'thumbnail' ? 'thumbnail' : 'original',
+      );
     } catch {
       res.status(404).json({ error: 'Provider not supported' });
     }

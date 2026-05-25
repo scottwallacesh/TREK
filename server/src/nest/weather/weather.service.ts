@@ -1,6 +1,6 @@
+import { getWeather, getDetailedWeather } from '../../services/weatherService';
 import { Injectable } from '@nestjs/common';
 import type { WeatherResult } from '@trek/shared';
-import { getWeather, getDetailedWeather } from '../../services/weatherService';
 
 /**
  * Thin Nest wrapper around the existing weather service. It delegates to the
@@ -12,10 +12,10 @@ import { getWeather, getDetailedWeather } from '../../services/weatherService';
 @Injectable()
 export class WeatherService {
   get(lat: string, lng: string, date: string | undefined, lang: string): Promise<WeatherResult> {
-    return getWeather(lat, lng, date, lang) as Promise<WeatherResult>;
+    return getWeather(lat, lng, date, lang);
   }
 
   getDetailed(lat: string, lng: string, date: string, lang: string): Promise<WeatherResult> {
-    return getDetailedWeather(lat, lng, date, lang) as Promise<WeatherResult>;
+    return getDetailedWeather(lat, lng, date, lang);
   }
 }

@@ -9,4 +9,4 @@ export const ADDON_IDS = {
   JOURNEY: 'journey',
 } as const;
 
-export type AddonId = typeof ADDON_IDS[keyof typeof ADDON_IDS];
+export type AddonId = (typeof ADDON_IDS)[keyof typeof ADDON_IDS];

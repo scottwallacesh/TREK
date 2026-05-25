@@ -1,3 +1,6 @@
+import { checkSsrf, SsrfBlockedError, safeFetch, createPinnedDispatcher } from '../../../src/utils/ssrfGuard';
+
+import dns from 'dns/promises';
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 // Capture Agent constructor options so we can test the lookup callback
@@ -19,9 +22,6 @@ vi.mock('undici', () => ({
     }
   },
 }));
-
-import dns from 'dns/promises';
-import { checkSsrf, SsrfBlockedError, safeFetch, createPinnedDispatcher } from '../../../src/utils/ssrfGuard';
 
 const mockLookup = vi.mocked(dns.lookup);
 
@@ -166,7 +166,6 @@ describe('checkSsrf', () => {
       expect(result.error).toBe('Could not resolve hostname');
     });
   });
-
 });
 
 describe('SsrfBlockedError', () => {

@@ -2,9 +2,17 @@
  * Tags integration tests — TAG-001 through TAG-010.
  * Covers GET/POST/PUT/DELETE /api/tags.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
-import request from 'supertest';
+import { createApp } from '../../src/app';
+import { runMigrations } from '../../src/db/migrations';
+import { createTables } from '../../src/db/schema';
+import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
+import { authCookie } from '../helpers/auth';
+import { createUser } from '../helpers/factories';
+import { resetTestDb } from '../helpers/test-db';
+
 import type { Application } from 'express';
+import request from 'supertest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
 const { testDb, dbMock } = vi.hoisted(() => {
   const Database = require('better-sqlite3');
@@ -18,7 +26,11 @@ const { testDb, dbMock } = vi.hoisted(() => {
     reinitialize: () => {},
     getPlaceWithTags: () => null,
     canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
+      db
+        .prepare(
+          `SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`,
+        )
+        .get(userId, tripId, userId),
     isOwner: (tripId: any, userId: number) =>
       !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
@@ -31,14 +43,6 @@ vi.mock('../../src/config', () => ({
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
   updateJwtSecret: () => {},
 }));
-
-import { createApp } from '../../src/app';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { resetTestDb } from '../helpers/test-db';
-import { createUser } from '../helpers/factories';
-import { authCookie } from '../helpers/auth';
-import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
 
 const app: Application = createApp();
 
@@ -60,19 +64,14 @@ afterAll(() => {
 describe('Tags', () => {
   it('TAG-001: GET /api/tags returns empty array for new user', async () => {
     const { user } = createUser(testDb);
-    const res = await request(app)
-      .get('/api/tags')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/tags').set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body.tags).toEqual([]);
   });
 
   it('TAG-002: POST /api/tags creates a tag with default color', async () => {
     const { user } = createUser(testDb);
-    const res = await request(app)
-      .post('/api/tags')
-      .set('Cookie', authCookie(user.id))
-      .send({ name: 'Must See' });
+    const res = await request(app).post('/api/tags').set('Cookie', authCookie(user.id)).send({ name: 'Must See' });
     expect(res.status).toBe(201);
     expect(res.body.tag).toMatchObject({ name: 'Must See', user_id: user.id });
     expect(res.body.tag.id).toBeDefined();
@@ -91,10 +90,7 @@ describe('Tags', () => {
 
   it('TAG-004: POST /api/tags without name returns 400', async () => {
     const { user } = createUser(testDb);
-    const res = await request(app)
-      .post('/api/tags')
-      .set('Cookie', authCookie(user.id))
-      .send({ color: '#ff0000' });
+    const res = await request(app).post('/api/tags').set('Cookie', authCookie(user.id)).send({ color: '#ff0000' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBeDefined();
   });
@@ -141,16 +137,12 @@ describe('Tags', () => {
       .send({ name: 'To Delete' });
     const tagId = createRes.body.tag.id;
 
-    const res = await request(app)
-      .delete(`/api/tags/${tagId}`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).delete(`/api/tags/${tagId}`).set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
 
     // Verify gone
-    const listRes = await request(app)
-      .get('/api/tags')
-      .set('Cookie', authCookie(user.id));
+    const listRes = await request(app).get('/api/tags').set('Cookie', authCookie(user.id));
     expect(listRes.body.tags).toHaveLength(0);
   });
 
@@ -163,23 +155,16 @@ describe('Tags', () => {
       .send({ name: 'User A Tag' });
     const tagId = createRes.body.tag.id;
 
-    const res = await request(app)
-      .delete(`/api/tags/${tagId}`)
-      .set('Cookie', authCookie(userB.id));
+    const res = await request(app).delete(`/api/tags/${tagId}`).set('Cookie', authCookie(userB.id));
     expect(res.status).toBe(404);
   });
 
   it('TAG-009: Tags are user-scoped — user A cannot see user B tags', async () => {
     const { user: userA } = createUser(testDb);
     const { user: userB } = createUser(testDb);
-    await request(app)
-      .post('/api/tags')
-      .set('Cookie', authCookie(userA.id))
-      .send({ name: 'User A Private Tag' });
+    await request(app).post('/api/tags').set('Cookie', authCookie(userA.id)).send({ name: 'User A Private Tag' });
 
-    const res = await request(app)
-      .get('/api/tags')
-      .set('Cookie', authCookie(userB.id));
+    const res = await request(app).get('/api/tags').set('Cookie', authCookie(userB.id));
     expect(res.status).toBe(200);
     expect(res.body.tags).toHaveLength(0);
   });

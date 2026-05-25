@@ -13,7 +13,10 @@ const DEFAULT_NEST_PREFIXES = ['/api/_nest', '/api/weather'];
 export function getNestPrefixes(): string[] {
   const raw = process.env.NEST_PREFIXES;
   if (raw !== undefined) {
-    return raw.split(',').map((s) => s.trim()).filter(Boolean);
+    return raw
+      .split(',')
+      .map((s) => s.trim())
+      .filter(Boolean);
   }
   return DEFAULT_NEST_PREFIXES;
 }

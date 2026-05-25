@@ -1,8 +1,5 @@
-import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
-import { broadcast } from '../websocket';
 import { checkPermission } from '../services/permissions';
-import { AuthRequest } from '../types';
 import {
   verifyTripAccess,
   listItems,
@@ -13,6 +10,10 @@ import {
   updateCategoryAssignees,
   reorderItems,
 } from '../services/todoService';
+import { AuthRequest } from '../types';
+import { broadcast } from '../websocket';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router({ mergeParams: true });
 
@@ -35,7 +36,9 @@ router.post('/', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   if (!name) return res.status(400).json({ error: 'Item name is required' });
@@ -53,7 +56,9 @@ router.put('/reorder', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   reorderItems(tripId, orderedIds);
@@ -68,10 +73,17 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
-  const updated = updateItem(tripId, id, { name, checked, category, due_date, description, assigned_user_id, priority }, Object.keys(req.body));
+  const updated = updateItem(
+    tripId,
+    id,
+    { name, checked, category, due_date, description, assigned_user_id, priority },
+    Object.keys(req.body),
+  );
   if (!updated) return res.status(404).json({ error: 'Item not found' });
 
   res.json({ item: updated });
@@ -85,7 +97,9 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   if (!deleteItem(tripId, id)) return res.status(404).json({ error: 'Item not found' });
@@ -114,7 +128,9 @@ router.put('/category-assignees/:categoryName', authenticate, (req: Request, res
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const cat = decodeURIComponent(categoryName);

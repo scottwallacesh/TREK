@@ -1,7 +1,8 @@
-import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
-import { AuthRequest } from '../types';
 import * as svc from '../services/vacayService';
+import { AuthRequest } from '../types';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 router.use(authenticate);
@@ -23,7 +24,14 @@ router.post('/plan/holiday-calendars', (req: Request, res: Response) => {
   const { region, label, color, sort_order } = req.body;
   if (!region) return res.status(400).json({ error: 'region required' });
   const planId = svc.getActivePlanId(authReq.user.id);
-  const calendar = svc.addHolidayCalendar(planId, region, label, color, sort_order, req.headers['x-socket-id'] as string);
+  const calendar = svc.addHolidayCalendar(
+    planId,
+    region,
+    label,
+    color,
+    sort_order,
+    req.headers['x-socket-id'] as string,
+  );
   res.json({ calendar });
 });
 
@@ -51,7 +59,7 @@ router.put('/color', (req: Request, res: Response) => {
   const planId = svc.getActivePlanId(authReq.user.id);
   const userId = target_user_id ? parseInt(target_user_id) : authReq.user.id;
   const planUsers = svc.getPlanUsers(planId);
-  if (!planUsers.find(u => u.id === userId)) {
+  if (!planUsers.find((u) => u.id === userId)) {
     return res.status(403).json({ error: 'User not in plan' });
   }
   svc.setUserColor(userId, planId, color, req.headers['x-socket-id'] as string);
@@ -64,7 +72,7 @@ router.post('/invite', (req: Request, res: Response) => {
   if (!user_id) return res.status(400).json({ error: 'user_id required' });
   const plan = svc.getActivePlan(authReq.user.id);
   const result = svc.sendInvite(plan.id, authReq.user.id, authReq.user.username, authReq.user.email, user_id);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ success: true });
 });
 
@@ -72,7 +80,7 @@ router.post('/invite/accept', (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { plan_id } = req.body;
   const result = svc.acceptInvite(authReq.user.id, plan_id, req.headers['x-socket-id'] as string);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ success: true });
 });
 
@@ -142,7 +150,7 @@ router.post('/entries/toggle', (req: Request, res: Response) => {
   if (target_user_id && parseInt(target_user_id) !== authReq.user.id) {
     const planUsers = svc.getPlanUsers(planId);
     const tid = parseInt(target_user_id);
-    if (!planUsers.find(u => u.id === tid)) {
+    if (!planUsers.find((u) => u.id === tid)) {
       return res.status(403).json({ error: 'User not in plan' });
     }
     userId = tid;
@@ -171,7 +179,7 @@ router.put('/stats/:year', (req: Request, res: Response) => {
   const planId = svc.getActivePlanId(authReq.user.id);
   const userId = target_user_id ? parseInt(target_user_id) : authReq.user.id;
   const planUsers = svc.getPlanUsers(planId);
-  if (!planUsers.find(u => u.id === userId)) {
+  if (!planUsers.find((u) => u.id === userId)) {
     return res.status(403).json({ error: 'User not in plan' });
   }
   svc.updateStats(userId, planId, year, vacation_days, req.headers['x-socket-id'] as string);

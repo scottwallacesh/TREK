@@ -1,14 +1,14 @@
-import express, { Request, Response } from 'express';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
 import { db, canAccessTrip } from '../db/database';
 import { authenticate, demoUploadBlock } from '../middleware/auth';
-import { broadcast } from '../websocket';
-import { AuthRequest, Trip } from '../types';
 import { writeAudit, getClientIp, logInfo } from '../services/auditLog';
+import { listBudgetItems } from '../services/budgetService';
+import { listDays, listAccommodations } from '../services/dayService';
+import { listFiles } from '../services/fileService';
+import { listItems as listPackingItems } from '../services/packingService';
 import { checkPermission } from '../services/permissions';
+import { listPlaces } from '../services/placeService';
+import { listReservations } from '../services/reservationService';
+import { listItems as listTodoItems } from '../services/todoService';
 import {
   listTrips,
   createTrip,
@@ -29,13 +29,14 @@ import {
   ValidationError,
   TRIP_SELECT,
 } from '../services/tripService';
-import { listDays, listAccommodations } from '../services/dayService';
-import { listPlaces } from '../services/placeService';
-import { listItems as listPackingItems } from '../services/packingService';
-import { listItems as listTodoItems } from '../services/todoService';
-import { listBudgetItems } from '../services/budgetService';
-import { listReservations } from '../services/reservationService';
-import { listFiles } from '../services/fileService';
+import { AuthRequest, Trip } from '../types';
+import { broadcast } from '../websocket';
+
+import express, { Request, Response } from 'express';
+import fs from 'fs';
+import multer from 'multer';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router();
 
@@ -86,7 +87,11 @@ router.post('/', authenticate, (req: Request, res: Response) => {
   if (!title) return res.status(400).json({ error: 'Title is required' });
 
   const toDateStr = (d: Date) => d.toISOString().slice(0, 10);
-  const addDays = (d: Date, n: number) => { const r = new Date(d); r.setDate(r.getDate() + n); return r; };
+  const addDays = (d: Date, n: number) => {
+    const r = new Date(d);
+    r.setDate(r.getDate() + n);
+    return r;
+  };
 
   let start_date: string | null = req.body.start_date || null;
   let end_date: string | null = req.body.end_date || null;
@@ -103,9 +108,22 @@ router.post('/', authenticate, (req: Request, res: Response) => {
     return res.status(400).json({ error: 'End date must be after start date' });
 
   const parsedDayCount = day_count ? Math.min(Math.max(Number(day_count) || 7, 1), 365) : undefined;
-  const { trip, tripId, reminderDays } = createTrip(authReq.user.id, { title, description, start_date, end_date, currency, reminder_days, day_count: parsedDayCount });
+  const { trip, tripId, reminderDays } = createTrip(authReq.user.id, {
+    title,
+    description,
+    start_date,
+    end_date,
+    currency,
+    reminder_days,
+    day_count: parsedDayCount,
+  });
 
-  writeAudit({ userId: authReq.user.id, action: 'trip.create', ip: getClientIp(req), details: { tripId, title, reminder_days: reminderDays === 0 ? 'none' : `${reminderDays} days` } });
+  writeAudit({
+    userId: authReq.user.id,
+    action: 'trip.create',
+    ip: getClientIp(req),
+    details: { tripId, title, reminder_days: reminderDays === 0 ? 'none' : `${reminderDays} days` },
+  });
   if (reminderDays > 0) {
     logInfo(`${authReq.user.email} set ${reminderDays}-day reminder for trip "${title}"`);
   }
@@ -144,7 +162,7 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
   }
   // General edit check (title, description, dates, currency, reminder_days)
   const editFields = ['title', 'description', 'start_date', 'end_date', 'currency', 'reminder_days', 'day_count'];
-  if (editFields.some(f => req.body[f] !== undefined)) {
+  if (editFields.some((f) => req.body[f] !== undefined)) {
     if (!checkPermission('trip_edit', authReq.user.role, tripOwnerId, authReq.user.id, isMember))
       return res.status(403).json({ error: 'No permission to edit this trip' });
   }
@@ -153,7 +171,17 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
     const result = updateTrip(req.params.id, authReq.user.id, req.body, authReq.user.role);
 
     if (Object.keys(result.changes).length > 0) {
-      writeAudit({ userId: authReq.user.id, action: 'trip.update', ip: getClientIp(req), details: { tripId: Number(req.params.id), trip: result.newTitle, ...(result.ownerEmail ? { owner: result.ownerEmail } : {}), ...result.changes } });
+      writeAudit({
+        userId: authReq.user.id,
+        action: 'trip.update',
+        ip: getClientIp(req),
+        details: {
+          tripId: Number(req.params.id),
+          trip: result.newTitle,
+          ...(result.ownerEmail ? { owner: result.ownerEmail } : {}),
+          ...result.changes,
+        },
+      });
       if (result.isAdminEdit && result.ownerEmail) {
         logInfo(`Admin ${authReq.user.email} edited trip "${result.newTitle}" owned by ${result.ownerEmail}`);
       }
@@ -204,12 +232,16 @@ router.post('/:id/copy', authenticate, (req: Request, res: Response) => {
   if (!checkPermission('trip_create', authReq.user.role, null, authReq.user.id, false))
     return res.status(403).json({ error: 'No permission to create trips' });
 
-  if (!canAccessTrip(req.params.id, authReq.user.id))
-    return res.status(404).json({ error: 'Trip not found' });
+  if (!canAccessTrip(req.params.id, authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
 
   try {
     const newTripId = copyTripById(req.params.id, authReq.user.id, req.body.title);
-    writeAudit({ userId: authReq.user.id, action: 'trip.copy', ip: getClientIp(req), details: { sourceTripId: Number(req.params.id), newTripId, title: req.body.title } });
+    writeAudit({
+      userId: authReq.user.id,
+      action: 'trip.copy',
+      ip: getClientIp(req),
+      details: { sourceTripId: Number(req.params.id), newTripId, title: req.body.title },
+    });
     const trip = db.prepare(`${TRIP_SELECT} WHERE t.id = :tripId`).get({ userId: authReq.user.id, tripId: newTripId });
     res.status(201).json({ trip });
   } catch {
@@ -228,7 +260,12 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
 
   const info = deleteTrip(req.params.id, authReq.user.id, authReq.user.role);
 
-  writeAudit({ userId: authReq.user.id, action: 'trip.delete', ip: getClientIp(req), details: { tripId: info.tripId, trip: info.title, ...(info.ownerEmail ? { owner: info.ownerEmail } : {}) } });
+  writeAudit({
+    userId: authReq.user.id,
+    action: 'trip.delete',
+    ip: getClientIp(req),
+    details: { tripId: info.tripId, trip: info.title, ...(info.ownerEmail ? { owner: info.ownerEmail } : {}) },
+  });
   if (info.isAdminDelete && info.ownerEmail) {
     logInfo(`Admin ${authReq.user.email} deleted trip "${info.title}" owned by ${info.ownerEmail}`);
   }
@@ -242,8 +279,7 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
 router.get('/:id/members', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const access = canAccessTrip(req.params.id, authReq.user.id);
-  if (!access)
-    return res.status(404).json({ error: 'Trip not found' });
+  if (!access) return res.status(404).json({ error: 'Trip not found' });
 
   const { owner, members } = listMembers(req.params.id, access.user_id);
   res.json({ owner, members, current_user_id: authReq.user.id });
@@ -254,8 +290,7 @@ router.get('/:id/members', authenticate, (req: Request, res: Response) => {
 router.post('/:id/members', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const access = canAccessTrip(req.params.id, authReq.user.id);
-  if (!access)
-    return res.status(404).json({ error: 'Trip not found' });
+  if (!access) return res.status(404).json({ error: 'Trip not found' });
 
   const tripOwnerId = access.user_id;
   const isMember = tripOwnerId !== authReq.user.id;
@@ -269,7 +304,18 @@ router.post('/:id/members', authenticate, (req: Request, res: Response) => {
 
     // Notify invited user
     import('../services/notificationService').then(({ send }) => {
-      send({ event: 'trip_invite', actorId: authReq.user.id, scope: 'user', targetId: result.targetUserId, params: { trip: result.tripTitle, actor: authReq.user.email, invitee: result.member.email, tripId: String(req.params.id) } }).catch(() => {});
+      send({
+        event: 'trip_invite',
+        actorId: authReq.user.id,
+        scope: 'user',
+        targetId: result.targetUserId,
+        params: {
+          trip: result.tripTitle,
+          actor: authReq.user.email,
+          invitee: result.member.email,
+          tripId: String(req.params.id),
+        },
+      }).catch(() => {});
     });
 
     res.status(201).json({ member: result.member });
@@ -284,8 +330,7 @@ router.post('/:id/members', authenticate, (req: Request, res: Response) => {
 
 router.delete('/:id/members/:userId', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  if (!canAccessTrip(req.params.id, authReq.user.id))
-    return res.status(404).json({ error: 'Trip not found' });
+  if (!canAccessTrip(req.params.id, authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
 
   const targetId = parseInt(req.params.userId);
   const isSelf = targetId === authReq.user.id;
@@ -340,8 +385,7 @@ router.get('/:id/bundle', authenticate, (req: Request, res: Response) => {
 
 router.get('/:id/export.ics', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  if (!canAccessTrip(req.params.id, authReq.user.id))
-    return res.status(404).json({ error: 'Trip not found' });
+  if (!canAccessTrip(req.params.id, authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
 
   try {
     const { ics, filename } = exportICS(req.params.id);

@@ -19,7 +19,10 @@ try {
     fs.writeFileSync(jwtSecretFile, _jwtSecret, { mode: 0o600 });
     console.log('Generated and saved JWT secret to', jwtSecretFile);
   } catch (writeErr: unknown) {
-    console.warn('WARNING: Could not persist JWT secret to disk:', writeErr instanceof Error ? writeErr.message : writeErr);
+    console.warn(
+      'WARNING: Could not persist JWT secret to disk:',
+      writeErr instanceof Error ? writeErr.message : writeErr,
+    );
     console.warn('Sessions will reset on server restart.');
   }
 }
@@ -92,7 +95,10 @@ if (_encryptionKey) {
     fs.writeFileSync(encKeyFile, _encryptionKey, { mode: 0o600 });
     console.log('Encryption key persisted to', encKeyFile);
   } catch (writeErr: unknown) {
-    console.warn('WARNING: Could not persist encryption key to disk:', writeErr instanceof Error ? writeErr.message : writeErr);
+    console.warn(
+      'WARNING: Could not persist encryption key to disk:',
+      writeErr instanceof Error ? writeErr.message : writeErr,
+    );
     console.warn('Set ENCRYPTION_KEY env var to avoid losing access to encrypted secrets on restart.');
   }
 }
@@ -107,6 +113,8 @@ export const ENCRYPTION_KEY = _encryptionKey;
 const SUPPORTED_LANG_CODES = ['de', 'en', 'es', 'fr', 'hu', 'nl', 'br', 'cs', 'pl', 'ru', 'zh', 'zh-TW', 'it', 'ar'];
 const rawDefaultLang = process.env.DEFAULT_LANGUAGE?.toLowerCase() || 'en';
 if (!SUPPORTED_LANG_CODES.includes(rawDefaultLang)) {
-  console.warn(`DEFAULT_LANGUAGE="${rawDefaultLang}" is not supported. Falling back to "en". Supported: ${SUPPORTED_LANG_CODES.join(', ')}`);
+  console.warn(
+    `DEFAULT_LANGUAGE="${rawDefaultLang}" is not supported. Falling back to "en". Supported: ${SUPPORTED_LANG_CODES.join(', ')}`,
+  );
 }
 export const DEFAULT_LANGUAGE = SUPPORTED_LANG_CODES.includes(rawDefaultLang) ? rawDefaultLang : 'en';

@@ -1,11 +1,11 @@
 // FE-COMP-NOTIF-001 to FE-COMP-NOTIF-016
-import { render, screen, waitFor } from '../../../tests/helpers/render';
 import userEvent from '@testing-library/user-event';
-import { useAuthStore } from '../../store/authStore';
-import { useSettingsStore } from '../../store/settingsStore';
-import { useInAppNotificationStore } from '../../store/inAppNotificationStore';
+import { buildSettings, buildUser } from '../../../tests/helpers/factories';
+import { render, screen } from '../../../tests/helpers/render';
 import { resetAllStores, seedStore } from '../../../tests/helpers/store';
-import { buildUser, buildSettings } from '../../../tests/helpers/factories';
+import { useAuthStore } from '../../store/authStore';
+import { useInAppNotificationStore } from '../../store/inAppNotificationStore';
+import { useSettingsStore } from '../../store/settingsStore';
 import InAppNotificationItem from './InAppNotificationItem';
 
 const buildNotification = (overrides = {}) => ({
@@ -102,9 +102,7 @@ describe('InAppNotificationItem', () => {
 
   it('FE-COMP-NOTIF-011: shows avatar image when sender_avatar is provided', () => {
     render(
-      <InAppNotificationItem
-        notification={buildNotification({ sender_avatar: 'https://example.com/avatar.png' })}
-      />
+      <InAppNotificationItem notification={buildNotification({ sender_avatar: 'https://example.com/avatar.png' })} />
     );
     expect(document.querySelector('img')).toBeInTheDocument();
     expect(document.querySelector('img')?.getAttribute('src')).toBe('https://example.com/avatar.png');
@@ -173,8 +171,9 @@ describe('InAppNotificationItem', () => {
       />
     );
     // t('notifications.title') = "Notifications" — the navigate button renders this
-    const navigateBtn = document.querySelector('button[style*="pointer"]') ??
-      Array.from(document.querySelectorAll('button')).find(b => b.textContent?.includes('Notifications'));
+    const navigateBtn =
+      document.querySelector('button[style*="pointer"]') ??
+      Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('Notifications'));
     expect(navigateBtn).toBeInTheDocument();
   });
 
@@ -196,9 +195,7 @@ describe('InAppNotificationItem', () => {
       />
     );
     // The navigate button renders t('notifications.title') = "Notifications"
-    const btn = Array.from(document.querySelectorAll('button')).find(
-      b => b.textContent?.includes('Notifications')
-    );
+    const btn = Array.from(document.querySelectorAll('button')).find((b) => b.textContent?.includes('Notifications'));
     expect(btn).toBeTruthy();
     await user.click(btn!);
     expect(markRead).toHaveBeenCalledWith(77);

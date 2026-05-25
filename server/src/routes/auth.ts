@@ -1,12 +1,5 @@
-import express, { Request, Response, NextFunction } from 'express';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { v4 as uuid } from 'uuid';
 import { authenticate, optionalAuth, demoUploadBlock } from '../middleware/auth';
-import { AuthRequest, OptionalAuthRequest } from '../types';
 import { writeAudit, getClientIp } from '../services/auditLog';
-import { setAuthCookie, clearAuthCookie } from '../services/cookie';
 import {
   getAppConfig,
   demoLogin,
@@ -39,7 +32,15 @@ import {
   requestPasswordReset,
   resetPassword,
 } from '../services/authService';
+import { setAuthCookie, clearAuthCookie } from '../services/cookie';
 import { sendPasswordResetEmail, getAppUrl } from '../services/notifications';
+import { AuthRequest, OptionalAuthRequest } from '../types';
+
+import express, { Request, Response, NextFunction } from 'express';
+import fs from 'fs';
+import multer from 'multer';
+import path from 'path';
+import { v4 as uuid } from 'uuid';
 
 const router = express.Router();
 
@@ -129,22 +130,32 @@ router.get('/app-config', optionalAuth, (req: Request, res: Response) => {
 
 router.post('/demo-login', (req: Request, res: Response) => {
   const result = demoLogin();
-  if (result.error) return res.status(result.status!).json({ error: result.error });
-  setAuthCookie(res, result.token!, req);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  setAuthCookie(res, result.token, req);
   res.json({ token: result.token, user: result.user });
 });
 
 router.get('/invite/:token', authLimiter, (req: Request, res: Response) => {
   const result = validateInviteToken(req.params.token);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
-  res.json({ valid: result.valid, max_uses: result.max_uses, used_count: result.used_count, expires_at: result.expires_at });
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  res.json({
+    valid: result.valid,
+    max_uses: result.max_uses,
+    used_count: result.used_count,
+    expires_at: result.expires_at,
+  });
 });
 
 router.post('/register', authLimiter, (req: Request, res: Response) => {
   const result = registerUser(req.body);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
-  writeAudit({ userId: result.auditUserId!, action: 'user.register', ip: getClientIp(req), details: result.auditDetails });
-  setAuthCookie(res, result.token!, req);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  writeAudit({
+    userId: result.auditUserId,
+    action: 'user.register',
+    ip: getClientIp(req),
+    details: result.auditDetails,
+  });
+  setAuthCookie(res, result.token, req);
   res.status(201).json({ token: result.token, user: result.user });
 });
 
@@ -152,15 +163,20 @@ router.post('/login', authLimiter, async (req: Request, res: Response) => {
   const started = Date.now();
   const result = loginUser(req.body);
   if (result.auditAction) {
-    writeAudit({ userId: result.auditUserId ?? null, action: result.auditAction, ip: getClientIp(req), details: result.auditDetails });
+    writeAudit({
+      userId: result.auditUserId ?? null,
+      action: result.auditAction,
+      ip: getClientIp(req),
+      details: result.auditDetails,
+    });
   }
   const elapsed = Date.now() - started;
   if (elapsed < LOGIN_MIN_LATENCY_MS) {
     await new Promise((r) => setTimeout(r, LOGIN_MIN_LATENCY_MS - elapsed));
   }
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   if (result.mfa_required) return res.json({ mfa_required: true, mfa_token: result.mfa_token });
-  setAuthCookie(res, result.token!, req);
+  setAuthCookie(res, result.token, req);
   res.json({ token: result.token, user: result.user });
 });
 
@@ -193,17 +209,37 @@ router.post('/forgot-password', forgotLimiter, async (req: Request, res: Respons
     const url = `${origin.replace(/\/$/, '')}/reset-password?token=${encodeURIComponent(outcome.tokenForDelivery)}`;
 
     // Audit the REQUEST always — even for "no user" — so abuse is visible.
-    writeAudit({ userId: outcome.userId, action: 'user.password_reset_request', ip, details: { delivered: 'pending' } });
+    writeAudit({
+      userId: outcome.userId,
+      action: 'user.password_reset_request',
+      ip,
+      details: { delivered: 'pending' },
+    });
 
     try {
       const delivery = await sendPasswordResetEmail(outcome.userEmail, url, outcome.userId);
-      writeAudit({ userId: outcome.userId, action: 'user.password_reset_request', ip, details: { delivered: delivery.delivered } });
+      writeAudit({
+        userId: outcome.userId,
+        action: 'user.password_reset_request',
+        ip,
+        details: { delivered: delivery.delivered },
+      });
     } catch (err) {
       // Never surface delivery failure to the caller — still respond ok.
-      writeAudit({ userId: outcome.userId, action: 'user.password_reset_request', ip, details: { delivered: 'failed' } });
+      writeAudit({
+        userId: outcome.userId,
+        action: 'user.password_reset_request',
+        ip,
+        details: { delivered: 'failed' },
+      });
     }
   } else {
-    writeAudit({ userId: outcome.userId, action: 'user.password_reset_request', ip, details: { reason: outcome.reason } });
+    writeAudit({
+      userId: outcome.userId,
+      action: 'user.password_reset_request',
+      ip,
+      details: { reason: outcome.reason },
+    });
   }
 
   // Pad the response so timing doesn't reveal outcome.
@@ -219,7 +255,7 @@ router.post('/reset-password', resetLimiter, (req: Request, res: Response) => {
   const result = resetPassword(req.body);
   if (result.error) {
     writeAudit({ userId: null, action: 'user.password_reset_fail', ip, details: { reason: result.error } });
-    return res.status(result.status!).json({ error: result.error });
+    return res.status(result.status).json({ error: result.error });
   }
   if (result.mfa_required) {
     return res.status(200).json({ mfa_required: true });
@@ -246,7 +282,7 @@ router.post('/logout', (req: Request, res: Response) => {
 router.put('/me/password', authenticate, rateLimiter(5, RATE_LIMIT_WINDOW), (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = changePassword(authReq.user.id, authReq.user.email, req.body);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   writeAudit({ userId: authReq.user.id, action: 'user.password_change', ip: getClientIp(req) });
   res.json({ success: true });
 });
@@ -254,7 +290,7 @@ router.put('/me/password', authenticate, rateLimiter(5, RATE_LIMIT_WINDOW), (req
 router.delete('/me', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = deleteAccount(authReq.user.id, authReq.user.email, authReq.user.role);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   writeAudit({ userId: authReq.user.id, action: 'user.account_delete', ip: getClientIp(req) });
   res.json({ success: true });
 });
@@ -272,22 +308,28 @@ router.put('/me/api-keys', authenticate, (req: Request, res: Response) => {
 router.put('/me/settings', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = updateSettings(authReq.user.id, req.body);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ success: result.success, user: result.user });
 });
 
 router.get('/me/settings', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = getSettings(authReq.user.id);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ settings: result.settings });
 });
 
-router.post('/avatar', authenticate, demoUploadBlock, avatarUpload.single('avatar'), async (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
-  res.json(await saveAvatar(authReq.user.id, req.file.filename));
-});
+router.post(
+  '/avatar',
+  authenticate,
+  demoUploadBlock,
+  avatarUpload.single('avatar'),
+  async (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+    res.json(await saveAvatar(authReq.user.id, req.file.filename));
+  },
+);
 
 router.delete('/avatar', authenticate, async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
@@ -302,21 +344,21 @@ router.get('/users', authenticate, (req: Request, res: Response) => {
 router.get('/validate-keys', authenticate, async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = await validateKeys(authReq.user.id);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ maps: result.maps, weather: result.weather, maps_details: result.maps_details });
 });
 
 router.get('/app-settings', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = getAppSettings(authReq.user.id);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json(result.data);
 });
 
 router.put('/app-settings', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = updateAppSettings(authReq.user.id, req.body);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   writeAudit({
     userId: authReq.user.id,
     action: 'settings.app_update',
@@ -334,17 +376,17 @@ router.get('/travel-stats', authenticate, (req: Request, res: Response) => {
 
 router.post('/mfa/verify-login', mfaLimiter, (req: Request, res: Response) => {
   const result = verifyMfaLogin(req.body);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
-  writeAudit({ userId: result.auditUserId!, action: 'user.login', ip: getClientIp(req), details: { mfa: true } });
-  setAuthCookie(res, result.token!, req);
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  writeAudit({ userId: result.auditUserId, action: 'user.login', ip: getClientIp(req), details: { mfa: true } });
+  setAuthCookie(res, result.token, req);
   res.json({ token: result.token, user: result.user });
 });
 
 router.post('/mfa/setup', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = setupMfa(authReq.user.id, authReq.user.email);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
-  result.qrPromise!
+  if (result.error) return res.status(result.status).json({ error: result.error });
+  result.qrPromise
     .then((qr_svg: string) => {
       res.json({ secret: result.secret, otpauth_url: result.otpauth_url, qr_svg });
     })
@@ -357,7 +399,7 @@ router.post('/mfa/setup', authenticate, (req: Request, res: Response) => {
 router.post('/mfa/enable', authenticate, mfaLimiter, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = enableMfa(authReq.user.id, req.body.code);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   writeAudit({ userId: authReq.user.id, action: 'user.mfa_enable', ip: getClientIp(req) });
   res.json({ success: true, mfa_enabled: result.mfa_enabled, backup_codes: result.backup_codes });
 });
@@ -365,7 +407,7 @@ router.post('/mfa/enable', authenticate, mfaLimiter, (req: Request, res: Respons
 router.post('/mfa/disable', authenticate, rateLimiter(5, RATE_LIMIT_WINDOW), (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = disableMfa(authReq.user.id, authReq.user.email, req.body);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   writeAudit({ userId: authReq.user.id, action: 'user.mfa_disable', ip: getClientIp(req) });
   res.json({ success: true, mfa_enabled: result.mfa_enabled });
 });
@@ -380,14 +422,14 @@ router.get('/mcp-tokens', authenticate, (req: Request, res: Response) => {
 router.post('/mcp-tokens', authenticate, rateLimiter(5, RATE_LIMIT_WINDOW), (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = createMcpToken(authReq.user.id, req.body.name);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.status(201).json({ token: result.token });
 });
 
 router.delete('/mcp-tokens/:id', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = deleteMcpToken(authReq.user.id, req.params.id);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ success: true });
 });
 
@@ -395,7 +437,7 @@ router.delete('/mcp-tokens/:id', authenticate, (req: Request, res: Response) => 
 router.post('/ws-token', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = createWsToken(authReq.user.id);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ token: result.token });
 });
 

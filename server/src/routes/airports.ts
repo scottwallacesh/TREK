@@ -1,6 +1,7 @@
-import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { searchAirports, findByIata } from '../services/airportService';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 

@@ -1,4 +1,5 @@
 import { ArgumentsHost, Catch, ExceptionFilter, HttpException } from '@nestjs/common';
+
 import type { Response } from 'express';
 
 /**
@@ -26,11 +27,7 @@ export class TrekExceptionFilter implements ExceptionFilter {
 
       const raw = typeof body === 'string' ? body : (body as { message?: unknown })?.message;
       const message =
-        status < 500
-          ? Array.isArray(raw)
-            ? raw.join(', ')
-            : String(raw ?? 'Error')
-          : 'Internal server error';
+        status < 500 ? (Array.isArray(raw) ? raw.join(', ') : String(raw ?? 'Error')) : 'Internal server error';
       res.status(status).json({ error: message });
       return;
     }

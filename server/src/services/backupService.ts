@@ -1,11 +1,12 @@
-import archiver from 'archiver';
-import unzipper from 'unzipper';
-import path from 'path';
-import fs from 'fs';
-import Database from 'better-sqlite3';
 import { db, closeDb, reinitialize } from '../db/database';
 import * as scheduler from '../scheduler';
 import { invalidatePermissionsCache } from './permissions';
+
+import archiver from 'archiver';
+import Database from 'better-sqlite3';
+import fs from 'fs';
+import path from 'path';
+import unzipper from 'unzipper';
 
 // ---------------------------------------------------------------------------
 // Paths
@@ -51,9 +52,7 @@ export function parseAutoBackupBody(body: Record<string, unknown>): {
   const enabled = body.enabled === true || body.enabled === 'true' || body.enabled === 1;
   const rawInterval = body.interval;
   const interval =
-    typeof rawInterval === 'string' && scheduler.VALID_INTERVALS.includes(rawInterval)
-      ? rawInterval
-      : 'daily';
+    typeof rawInterval === 'string' && scheduler.VALID_INTERVALS.includes(rawInterval) ? rawInterval : 'daily';
   const keep_days = Math.max(0, parseIntField(body.keep_days, 7));
   const hour = Math.min(23, Math.max(0, parseIntField(body.hour, 2)));
   const day_of_week = Math.min(6, Math.max(0, parseIntField(body.day_of_week, 0)));
@@ -109,9 +108,10 @@ export interface BackupInfo {
 
 export function listBackups(): BackupInfo[] {
   ensureBackupsDir();
-  return fs.readdirSync(backupsDir)
-    .filter(f => f.endsWith('.zip'))
-    .map(filename => {
+  return fs
+    .readdirSync(backupsDir)
+    .filter((f) => f.endsWith('.zip'))
+    .map((filename) => {
       const filePath = path.join(backupsDir, filename);
       const stat = fs.statSync(filePath);
       return {
@@ -136,7 +136,9 @@ export async function createBackup(): Promise<BackupInfo> {
   const outputPath = path.join(backupsDir, filename);
 
   try {
-    try { db.exec('PRAGMA wal_checkpoint(TRUNCATE)'); } catch (e) {}
+    try {
+      db.exec('PRAGMA wal_checkpoint(TRUNCATE)');
+    } catch (e) {}
 
     await new Promise<void>((resolve, reject) => {
       const output = fs.createWriteStream(outputPath);
@@ -186,7 +188,8 @@ export interface RestoreResult {
 export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
   const extractDir = path.join(dataDir, `restore-${Date.now()}`);
   try {
-    await fs.createReadStream(zipPath)
+    await fs
+      .createReadStream(zipPath)
       .pipe(unzipper.Extract({ path: extractDir }))
       .promise();
 
@@ -203,18 +206,26 @@ export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
       const integrityResult = uploadedDb.prepare('PRAGMA integrity_check').get() as { integrity_check: string };
       if (integrityResult.integrity_check !== 'ok') {
         fs.rmSync(extractDir, { recursive: true, force: true });
-        return { success: false, error: `Uploaded database failed integrity check: ${integrityResult.integrity_check}`, status: 400 };
+        return {
+          success: false,
+          error: `Uploaded database failed integrity check: ${integrityResult.integrity_check}`,
+          status: 400,
+        };
       }
 
       const requiredTables = ['users', 'trips', 'trip_members', 'places', 'days'];
-      const existingTables = uploadedDb
-        .prepare("SELECT name FROM sqlite_master WHERE type='table'")
-        .all() as { name: string }[];
-      const tableNames = new Set(existingTables.map(t => t.name));
+      const existingTables = uploadedDb.prepare("SELECT name FROM sqlite_master WHERE type='table'").all() as {
+        name: string;
+      }[];
+      const tableNames = new Set(existingTables.map((t) => t.name));
       for (const table of requiredTables) {
         if (!tableNames.has(table)) {
           fs.rmSync(extractDir, { recursive: true, force: true });
-          return { success: false, error: `Uploaded database is missing required table: ${table}. This does not appear to be a TREK backup.`, status: 400 };
+          return {
+            success: false,
+            error: `Uploaded database is missing required table: ${table}. This does not appear to be a TREK backup.`,
+            status: 400,
+          };
         }
       }
     } catch (err) {
@@ -229,7 +240,9 @@ export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
     try {
       const dbDest = path.join(dataDir, 'travel.db');
       for (const ext of ['', '-wal', '-shm']) {
-        try { fs.unlinkSync(dbDest + ext); } catch (e) {}
+        try {
+          fs.unlinkSync(dbDest + ext);
+        } catch (e) {}
       }
       fs.copyFileSync(extractedDb, dbDest);
 
@@ -239,7 +252,9 @@ export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
           const subPath = path.join(uploadsDir, sub);
           if (fs.statSync(subPath).isDirectory()) {
             for (const file of fs.readdirSync(subPath)) {
-              try { fs.unlinkSync(path.join(subPath, file)); } catch (e) {}
+              try {
+                fs.unlinkSync(path.join(subPath, file));
+              } catch (e) {}
             }
           }
         }
@@ -266,7 +281,11 @@ export async function restoreFromZip(zipPath: string): Promise<RestoreResult> {
     // stale anyway. Invalidating here too costs nothing and guarantees
     // we never serve cached permissions that don't match the DB state
     // we leave the process in after a failed restore.
-    try { invalidatePermissionsCache(); } catch { /* best-effort */ }
+    try {
+      invalidatePermissionsCache();
+    } catch {
+      /* best-effort */
+    }
     throw err;
   }
 }

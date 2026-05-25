@@ -21,7 +21,8 @@ export function cookieOptions(clear = false, req?: Request) {
   if (process.env.COOKIE_SECURE?.toLowerCase() === 'false') {
     return buildOptions(clear, false);
   }
-  const envSecure = process.env.NODE_ENV?.toLowerCase() === 'production' || process.env.FORCE_HTTPS?.toLowerCase() === 'true';
+  const envSecure =
+    process.env.NODE_ENV?.toLowerCase() === 'production' || process.env.FORCE_HTTPS?.toLowerCase() === 'true';
   const requestSecure = req?.secure === true;
   return buildOptions(clear, envSecure || requestSecure);
 }

@@ -1,11 +1,12 @@
-import express, { Request, Response } from 'express';
-import { authenticate, adminOnly } from '../middleware/auth';
-import { AuthRequest } from '../types';
-import { writeAudit, getClientIp, logInfo } from '../services/auditLog';
-import * as svc from '../services/adminService';
-import { getAdminUserDefaults, setAdminUserDefaults } from '../services/settingsService';
 import { invalidateMcpSessions } from '../mcp';
+import { authenticate, adminOnly } from '../middleware/auth';
+import * as svc from '../services/adminService';
+import { writeAudit, getClientIp, logInfo } from '../services/auditLog';
 import { getPreferencesMatrix, setAdminPreferences } from '../services/notificationPreferencesService';
+import { getAdminUserDefaults, setAdminUserDefaults } from '../services/settingsService';
+import { AuthRequest } from '../types';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 
@@ -19,7 +20,7 @@ router.get('/users', (_req: Request, res: Response) => {
 
 router.post('/users', (req: Request, res: Response) => {
   const result = svc.createUser(req.body);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   const authReq = req as AuthRequest;
   writeAudit({
     userId: authReq.user.id,
@@ -33,7 +34,7 @@ router.post('/users', (req: Request, res: Response) => {
 
 router.put('/users/:id', (req: Request, res: Response) => {
   const result = svc.updateUser(req.params.id, req.body);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   const authReq = req as AuthRequest;
   writeAudit({
     userId: authReq.user.id,
@@ -49,7 +50,7 @@ router.put('/users/:id', (req: Request, res: Response) => {
 router.delete('/users/:id', (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = svc.deleteUser(req.params.id, authReq.user.id);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   writeAudit({
     userId: authReq.user.id,
     action: 'admin.user_delete',
@@ -87,13 +88,17 @@ router.put('/permissions', (req: Request, res: Response) => {
     ip: getClientIp(req),
     details: permissions,
   });
-  res.json({ success: true, permissions: result.permissions, ...(result.skipped.length ? { skipped: result.skipped } : {}) });
+  res.json({
+    success: true,
+    permissions: result.permissions,
+    ...(result.skipped.length ? { skipped: result.skipped } : {}),
+  });
 });
 
 // ── Audit Log ──────────────────────────────────────────────────────────────
 
 router.get('/audit-log', (req: Request, res: Response) => {
-  res.json(svc.getAuditLog(req.query as { limit?: string; offset?: string }));
+  res.json(svc.getAuditLog(req.query));
 });
 
 // ── OIDC Settings ──────────────────────────────────────────────────────────
@@ -121,7 +126,7 @@ router.put('/oidc', (req: Request, res: Response) => {
 
 router.post('/save-demo-baseline', (req: Request, res: Response) => {
   const result = svc.saveDemoBaseline();
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   const authReq = req as AuthRequest;
   writeAudit({ userId: authReq.user.id, action: 'admin.demo_baseline_save', ip: getClientIp(req) });
   res.json({ success: true, message: result.message });
@@ -172,7 +177,7 @@ router.post('/invites', (req: Request, res: Response) => {
 
 router.delete('/invites/:id', (req: Request, res: Response) => {
   const result = svc.deleteInvite(req.params.id);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   const authReq = req as AuthRequest;
   writeAudit({
     userId: authReq.user.id,
@@ -285,26 +290,26 @@ router.get('/packing-templates', (_req: Request, res: Response) => {
 
 router.get('/packing-templates/:id', (req: Request, res: Response) => {
   const result = svc.getPackingTemplate(req.params.id);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   res.json(result);
 });
 
 router.post('/packing-templates', (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = svc.createPackingTemplate(req.body.name, authReq.user.id);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   res.status(201).json(result);
 });
 
 router.put('/packing-templates/:id', (req: Request, res: Response) => {
   const result = svc.updatePackingTemplate(req.params.id, req.body);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   res.json(result);
 });
 
 router.delete('/packing-templates/:id', (req: Request, res: Response) => {
   const result = svc.deletePackingTemplate(req.params.id);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   const authReq = req as AuthRequest;
   writeAudit({
     userId: authReq.user.id,
@@ -320,19 +325,19 @@ router.delete('/packing-templates/:id', (req: Request, res: Response) => {
 
 router.post('/packing-templates/:id/categories', (req: Request, res: Response) => {
   const result = svc.createTemplateCategory(req.params.id, req.body.name);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   res.status(201).json(result);
 });
 
 router.put('/packing-templates/:templateId/categories/:catId', (req: Request, res: Response) => {
   const result = svc.updateTemplateCategory(req.params.templateId, req.params.catId, req.body);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   res.json(result);
 });
 
 router.delete('/packing-templates/:templateId/categories/:catId', (req: Request, res: Response) => {
   const result = svc.deleteTemplateCategory(req.params.templateId, req.params.catId);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   res.json({ success: true });
 });
 
@@ -340,19 +345,19 @@ router.delete('/packing-templates/:templateId/categories/:catId', (req: Request,
 
 router.post('/packing-templates/:templateId/categories/:catId/items', (req: Request, res: Response) => {
   const result = svc.createTemplateItem(req.params.templateId, req.params.catId, req.body.name);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   res.status(201).json(result);
 });
 
 router.put('/packing-templates/:templateId/items/:itemId', (req: Request, res: Response) => {
   const result = svc.updateTemplateItem(req.params.itemId, req.body);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   res.json(result);
 });
 
 router.delete('/packing-templates/:templateId/items/:itemId', (req: Request, res: Response) => {
   const result = svc.deleteTemplateItem(req.params.itemId);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   res.json({ success: true });
 });
 
@@ -364,7 +369,7 @@ router.get('/addons', (_req: Request, res: Response) => {
 
 router.put('/addons/:id', (req: Request, res: Response) => {
   const result = svc.updateAddon(req.params.id, req.body);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   const authReq = req as AuthRequest;
   writeAudit({
     userId: authReq.user.id,
@@ -386,7 +391,7 @@ router.get('/mcp-tokens', (_req: Request, res: Response) => {
 
 router.delete('/mcp-tokens/:id', (req: Request, res: Response) => {
   const result = svc.deleteMcpToken(req.params.id);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   res.json({ success: true });
 });
 
@@ -398,7 +403,7 @@ router.get('/oauth-sessions', (_req: Request, res: Response) => {
 
 router.delete('/oauth-sessions/:id', (req: Request, res: Response) => {
   const result = svc.revokeOAuthSession(req.params.id);
-  if ('error' in result) return res.status(result.status!).json({ error: result.error });
+  if ('error' in result) return res.status(result.status).json({ error: result.error });
   const authReq = req as AuthRequest;
   writeAudit({
     userId: authReq.user.id,
@@ -413,7 +418,7 @@ router.delete('/oauth-sessions/:id', (req: Request, res: Response) => {
 
 router.post('/rotate-jwt-secret', (req: Request, res: Response) => {
   const result = svc.rotateJwtSecret();
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   const authReq = req as AuthRequest;
   writeAudit({
     userId: authReq.user.id,

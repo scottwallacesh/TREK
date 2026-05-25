@@ -1,38 +1,33 @@
-import { Response } from 'express';
-import path from 'path';
-import fs from 'fs';
 import { db } from '../../db/database';
 import type { TrekPhoto } from '../../types';
-import { streamImmichAsset, fetchImmichThumbnailBytes, getAssetInfo as getImmichAssetInfo } from './immichService';
-import { streamSynologyAsset, fetchSynologyThumbnailBytes, getSynologyAssetInfo } from './synologyService';
+import { encrypt_api_key, decrypt_api_key } from '../apiKeyCrypto';
 import type { ServiceResult, AssetInfo } from './helpersService';
 import { fail, success } from './helpersService';
-import { encrypt_api_key, decrypt_api_key } from '../apiKeyCrypto';
-import * as photoCache from './trekPhotoCache';
+import { streamImmichAsset, fetchImmichThumbnailBytes, getAssetInfo as getImmichAssetInfo } from './immichService';
+import { streamSynologyAsset, fetchSynologyThumbnailBytes, getSynologyAssetInfo } from './synologyService';
 import { ensureLocalThumbnail } from './thumbnailService';
+import * as photoCache from './trekPhotoCache';
+
+import { Response } from 'express';
+import fs from 'fs';
+import path from 'path';
 
 // ── Lookup / Register ────────────────────────────────────────────────────
 
-export function getOrCreateTrekPhoto(
-  provider: string,
-  assetId: string,
-  ownerId: number,
-  passphrase?: string,
-): number {
-  const existing = db.prepare(
-    'SELECT id FROM trek_photos WHERE provider = ? AND asset_id = ? AND owner_id = ?'
-  ).get(provider, assetId, ownerId) as { id: number } | undefined;
+export function getOrCreateTrekPhoto(provider: string, assetId: string, ownerId: number, passphrase?: string): number {
+  const existing = db
+    .prepare('SELECT id FROM trek_photos WHERE provider = ? AND asset_id = ? AND owner_id = ?')
+    .get(provider, assetId, ownerId) as { id: number } | undefined;
   if (existing) {
     if (passphrase) {
-      db.prepare('UPDATE trek_photos SET passphrase = ? WHERE id = ?')
-        .run(encrypt_api_key(passphrase), existing.id);
+      db.prepare('UPDATE trek_photos SET passphrase = ? WHERE id = ?').run(encrypt_api_key(passphrase), existing.id);
     }
     return existing.id;
   }
 
-  const res = db.prepare(
-    'INSERT INTO trek_photos (provider, asset_id, owner_id, passphrase) VALUES (?, ?, ?, ?)'
-  ).run(provider, assetId, ownerId, passphrase ? encrypt_api_key(passphrase) : null);
+  const res = db
+    .prepare('INSERT INTO trek_photos (provider, asset_id, owner_id, passphrase) VALUES (?, ?, ?, ?)')
+    .run(provider, assetId, ownerId, passphrase ? encrypt_api_key(passphrase) : null);
   return Number(res.lastInsertRowid);
 }
 
@@ -42,19 +37,19 @@ export function getOrCreateLocalTrekPhoto(
   width?: number | null,
   height?: number | null,
 ): number {
-  const existing = db.prepare(
-    "SELECT id FROM trek_photos WHERE provider = 'local' AND file_path = ?"
-  ).get(filePath) as { id: number } | undefined;
+  const existing = db.prepare("SELECT id FROM trek_photos WHERE provider = 'local' AND file_path = ?").get(filePath) as
+    | { id: number }
+    | undefined;
   if (existing) return existing.id;
 
-  const res = db.prepare(
-    'INSERT INTO trek_photos (provider, file_path, thumbnail_path, width, height) VALUES (?, ?, ?, ?, ?)'
-  ).run('local', filePath, thumbnailPath || null, width || null, height || null);
+  const res = db
+    .prepare('INSERT INTO trek_photos (provider, file_path, thumbnail_path, width, height) VALUES (?, ?, ?, ?, ?)')
+    .run('local', filePath, thumbnailPath || null, width || null, height || null);
   return Number(res.lastInsertRowid);
 }
 
 export function resolveTrekPhoto(photoId: number): TrekPhoto | null {
-  return db.prepare('SELECT * FROM trek_photos WHERE id = ?').get(photoId) as TrekPhoto | undefined || null;
+  return (db.prepare('SELECT * FROM trek_photos WHERE id = ?').get(photoId) as TrekPhoto | undefined) || null;
 }
 
 // ── Streaming ────────────────────────────────────────────────────────────
@@ -65,7 +60,7 @@ async function streamCachedThumbnail(
   fetchBytes: () => Promise<{ bytes: Buffer; contentType: string } | { error: string; status: number }>,
   fallback: () => Promise<unknown>,
 ): Promise<void> {
-  const key = photoCache.cacheKey(photo.provider!, photo.asset_id!, 'thumbnail', photo.owner_id!);
+  const key = photoCache.cacheKey(photo.provider, photo.asset_id, 'thumbnail', photo.owner_id);
 
   if (photoCache.serveFresh(res, key)) return;
 
@@ -77,7 +72,7 @@ async function streamCachedThumbnail(
     return;
   }
 
-  const promise = fetchBytes().then(async result => {
+  const promise = fetchBytes().then(async (result) => {
     if ('error' in result) return null;
     await photoCache.put(key, result.bytes, result.contentType);
     return result.bytes;
@@ -111,7 +106,7 @@ export async function streamPhoto(
         if (result) {
           thumbRel = result.thumbnailRelPath;
           db.prepare(
-            'UPDATE trek_photos SET thumbnail_path = ?, width = COALESCE(width, ?), height = COALESCE(height, ?) WHERE id = ?'
+            'UPDATE trek_photos SET thumbnail_path = ?, width = COALESCE(width, ?), height = COALESCE(height, ?) WHERE id = ?',
           ).run(thumbRel, result.width, result.height, photo.id);
         }
       }
@@ -142,26 +137,28 @@ export async function streamPhoto(
     case 'immich': {
       if (kind === 'thumbnail') {
         await streamCachedThumbnail(
-          res, photo,
-          () => fetchImmichThumbnailBytes(userId, photo.asset_id!, photo.owner_id!),
-          () => streamImmichAsset(res, userId, photo.asset_id!, kind, photo.owner_id!),
+          res,
+          photo,
+          () => fetchImmichThumbnailBytes(userId, photo.asset_id, photo.owner_id),
+          () => streamImmichAsset(res, userId, photo.asset_id, kind, photo.owner_id),
         );
         return;
       }
-      await streamImmichAsset(res, userId, photo.asset_id!, kind, photo.owner_id!);
+      await streamImmichAsset(res, userId, photo.asset_id, kind, photo.owner_id);
       return;
     }
     case 'synologyphotos': {
-      const passphrase = photo.passphrase ? (decrypt_api_key(photo.passphrase) || undefined) : undefined;
+      const passphrase = photo.passphrase ? decrypt_api_key(photo.passphrase) || undefined : undefined;
       if (kind === 'thumbnail') {
         await streamCachedThumbnail(
-          res, photo,
-          () => fetchSynologyThumbnailBytes(userId, photo.owner_id!, photo.asset_id!, passphrase),
-          () => streamSynologyAsset(res, userId, photo.owner_id!, photo.asset_id!, kind, undefined, passphrase),
+          res,
+          photo,
+          () => fetchSynologyThumbnailBytes(userId, photo.owner_id, photo.asset_id, passphrase),
+          () => streamSynologyAsset(res, userId, photo.owner_id, photo.asset_id, kind, undefined, passphrase),
         );
         return;
       }
-      await streamSynologyAsset(res, userId, photo.owner_id!, photo.asset_id!, kind, undefined, passphrase);
+      await streamSynologyAsset(res, userId, photo.owner_id, photo.asset_id, kind, undefined, passphrase);
       return;
     }
     default:
@@ -171,10 +168,7 @@ export async function streamPhoto(
 
 // ── Asset Info ────────────────────────────────────────────────────────────
 
-export async function getPhotoInfo(
-  userId: number,
-  photoId: number,
-): Promise<ServiceResult<AssetInfo>> {
+export async function getPhotoInfo(userId: number, photoId: number): Promise<ServiceResult<AssetInfo>> {
   const photo = resolveTrekPhoto(photoId);
   if (!photo) return fail('Photo not found', 404);
 
@@ -188,16 +182,16 @@ export async function getPhotoInfo(
         width: photo.width,
         height: photo.height,
         fileName: photo.file_path?.split('/').pop() || null,
-      } as AssetInfo);
+      });
     }
     case 'immich': {
-      const result = await getImmichAssetInfo(userId, photo.asset_id!, photo.owner_id!);
+      const result = await getImmichAssetInfo(userId, photo.asset_id, photo.owner_id);
       if (result.error) return fail(result.error, result.status || 500);
       return success(result.data as AssetInfo);
     }
     case 'synologyphotos': {
-      const passphrase = photo.passphrase ? (decrypt_api_key(photo.passphrase) || undefined) : undefined;
-      return getSynologyAssetInfo(userId, photo.asset_id!, photo.owner_id!, passphrase);
+      const passphrase = photo.passphrase ? decrypt_api_key(photo.passphrase) || undefined : undefined;
+      return getSynologyAssetInfo(userId, photo.asset_id, photo.owner_id, passphrase);
     }
     default:
       return fail(`Unknown provider: ${photo.provider}`, 400);
@@ -206,26 +200,28 @@ export async function getPhotoInfo(
 
 // ── Update provider on existing trek_photo (for Immich upload sync) ─────
 
-export function setTrekPhotoProvider(
-  trekPhotoId: number,
-  provider: string,
-  assetId: string,
-  ownerId: number,
-): void {
-  db.prepare(
-    'UPDATE trek_photos SET provider = ?, asset_id = ?, owner_id = ? WHERE id = ?'
-  ).run(provider, assetId, ownerId, trekPhotoId);
+export function setTrekPhotoProvider(trekPhotoId: number, provider: string, assetId: string, ownerId: number): void {
+  db.prepare('UPDATE trek_photos SET provider = ?, asset_id = ?, owner_id = ? WHERE id = ?').run(
+    provider,
+    assetId,
+    ownerId,
+    trekPhotoId,
+  );
 }
 
 // ── Orphan cleanup ───────────────────────────────────────────────────────
 
 export function deleteTrekPhotoIfOrphan(photoId: number): void {
-  const stillUsed = db.prepare(`
+  const stillUsed = db
+    .prepare(
+      `
     SELECT 1 FROM trip_photos WHERE photo_id = ?
     UNION ALL
     SELECT 1 FROM journey_photos WHERE photo_id = ?
     LIMIT 1
-  `).get(photoId, photoId);
+  `,
+    )
+    .get(photoId, photoId);
   if (stillUsed) return;
   db.prepare("DELETE FROM trek_photos WHERE id = ? AND provider != 'local'").run(photoId);
 }

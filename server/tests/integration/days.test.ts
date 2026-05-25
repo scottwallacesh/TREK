@@ -2,9 +2,17 @@
  * Days & Accommodations API integration tests.
  * Covers DAY-001 through DAY-006 and ACCOM-001 through ACCOM-003.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
-import request from 'supertest';
+import { createApp } from '../../src/app';
+import { runMigrations } from '../../src/db/migrations';
+import { createTables } from '../../src/db/schema';
+import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
+import { authCookie } from '../helpers/auth';
+import { createUser, createTrip, createDay, createPlace, addTripMember } from '../helpers/factories';
+import { resetTestDb } from '../helpers/test-db';
+
 import type { Application } from 'express';
+import request from 'supertest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // In-memory DB — schema applied in beforeAll after mocks register
@@ -20,13 +28,29 @@ const { testDb, dbMock } = vi.hoisted(() => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: (placeId: number) => {
-      const place: any = db.prepare(`SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`).get(placeId);
+      const place: any = db
+        .prepare(
+          `SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`,
+        )
+        .get(placeId);
       if (!place) return null;
-      const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-      return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
+      const tags = db
+        .prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`)
+        .all(placeId);
+      return {
+        ...place,
+        category: place.category_id
+          ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon }
+          : null,
+        tags,
+      };
     },
     canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
+      db
+        .prepare(
+          `SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`,
+        )
+        .get(userId, tripId, userId),
     isOwner: (tripId: any, userId: number) =>
       !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
@@ -40,18 +64,19 @@ vi.mock('../../src/config', () => ({
   updateJwtSecret: () => {},
 }));
 
-import { createApp } from '../../src/app';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { resetTestDb } from '../helpers/test-db';
-import { createUser, createTrip, createDay, createPlace, addTripMember } from '../helpers/factories';
-import { authCookie } from '../helpers/auth';
-import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
-
 const app: Application = createApp();
-beforeAll(() => { createTables(testDb); runMigrations(testDb); });
-beforeEach(() => { resetTestDb(testDb); loginAttempts.clear(); mfaAttempts.clear(); });
-afterAll(() => { testDb.close(); });
+beforeAll(() => {
+  createTables(testDb);
+  runMigrations(testDb);
+});
+beforeEach(() => {
+  resetTestDb(testDb);
+  loginAttempts.clear();
+  mfaAttempts.clear();
+});
+afterAll(() => {
+  testDb.close();
+});
 
 // ─────────────────────────────────────────────────────────────────────────────
 // List days (DAY-001, DAY-002)
@@ -62,9 +87,7 @@ describe('List days', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Paris Trip', start_date: '2026-06-01', end_date: '2026-06-03' });
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/days`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/days`).set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.days).toBeDefined();
@@ -75,12 +98,14 @@ describe('List days', () => {
   it('DAY-001 — Member can list days for a shared trip', async () => {
     const { user: owner } = createUser(testDb);
     const { user: member } = createUser(testDb);
-    const trip = createTrip(testDb, owner.id, { title: 'Shared Trip', start_date: '2026-07-01', end_date: '2026-07-02' });
+    const trip = createTrip(testDb, owner.id, {
+      title: 'Shared Trip',
+      start_date: '2026-07-01',
+      end_date: '2026-07-02',
+    });
     addTripMember(testDb, trip.id, member.id);
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/days`)
-      .set('Cookie', authCookie(member.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/days`).set('Cookie', authCookie(member.id));
 
     expect(res.status).toBe(200);
     expect(res.body.days).toHaveLength(2);
@@ -91,9 +116,7 @@ describe('List days', () => {
     const { user: stranger } = createUser(testDb);
     const trip = createTrip(testDb, owner.id, { title: 'Private Trip' });
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/days`)
-      .set('Cookie', authCookie(stranger.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/days`).set('Cookie', authCookie(stranger.id));
 
     expect(res.status).toBe(404);
   });
@@ -232,9 +255,7 @@ describe('Reorder days', () => {
       end_date: '2026-09-03',
     });
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/days`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/days`).set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.days).toHaveLength(3);
@@ -254,9 +275,7 @@ describe('Delete day', () => {
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
     const day = createDay(testDb, trip.id);
 
-    const res = await request(app)
-      .delete(`/api/trips/${trip.id}/days/${day.id}`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).delete(`/api/trips/${trip.id}/days/${day.id}`).set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -269,9 +288,7 @@ describe('Delete day', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id, { title: 'Trip' });
 
-    const res = await request(app)
-      .delete(`/api/trips/${trip.id}/days/999999`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).delete(`/api/trips/${trip.id}/days/999999`).set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(404);
     expect(res.body.error).toMatch(/not found/i);
@@ -345,13 +362,11 @@ describe('Accommodations', () => {
     const place = createPlace(testDb, trip.id, { name: 'Boutique Inn' });
 
     // Seed accommodation directly
-    testDb.prepare(
-      'INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id) VALUES (?, ?, ?, ?)'
-    ).run(trip.id, place.id, day1.id, day2.id);
+    testDb
+      .prepare('INSERT INTO day_accommodations (trip_id, place_id, start_day_id, end_day_id) VALUES (?, ?, ?, ?)')
+      .run(trip.id, place.id, day1.id, day2.id);
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/accommodations`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/accommodations`).set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.accommodations).toBeDefined();
@@ -365,9 +380,7 @@ describe('Accommodations', () => {
     const { user: stranger } = createUser(testDb);
     const trip = createTrip(testDb, owner.id, { title: 'Private Trip' });
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/accommodations`)
-      .set('Cookie', authCookie(stranger.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/accommodations`).set('Cookie', authCookie(stranger.id));
 
     expect(res.status).toBe(404);
   });
@@ -426,9 +439,9 @@ describe('Accommodations', () => {
     expect(res.status).toBe(201);
 
     // Linked reservation should exist
-    const reservation = testDb.prepare(
-      'SELECT * FROM reservations WHERE accommodation_id = ?'
-    ).get(res.body.accommodation.id) as any;
+    const reservation = testDb
+      .prepare('SELECT * FROM reservations WHERE accommodation_id = ?')
+      .get(res.body.accommodation.id) as any;
     expect(reservation).toBeDefined();
     expect(reservation.type).toBe('hotel');
     expect(reservation.confirmation_number).toBe('CONF-XYZ');
@@ -487,9 +500,9 @@ describe('Accommodations', () => {
       .send({ place_id: place.id, start_day_id: day1.id, end_day_id: day2.id });
 
     const accommodationId = createRes.body.accommodation.id;
-    const reservationBefore = testDb.prepare(
-      'SELECT id FROM reservations WHERE accommodation_id = ?'
-    ).get(accommodationId) as any;
+    const reservationBefore = testDb
+      .prepare('SELECT id FROM reservations WHERE accommodation_id = ?')
+      .get(accommodationId) as any;
     expect(reservationBefore).toBeDefined();
 
     const deleteRes = await request(app)
@@ -497,9 +510,7 @@ describe('Accommodations', () => {
       .set('Cookie', authCookie(user.id));
     expect(deleteRes.status).toBe(200);
 
-    const reservationAfter = testDb.prepare(
-      'SELECT id FROM reservations WHERE id = ?'
-    ).get(reservationBefore.id);
+    const reservationAfter = testDb.prepare('SELECT id FROM reservations WHERE id = ?').get(reservationBefore.id);
     expect(reservationAfter).toBeUndefined();
   });
 
@@ -523,14 +534,10 @@ describe('Accommodations', () => {
       });
     expect(createRes.status).toBe(201);
 
-    const accommodationId = testDb.prepare(
-      'SELECT id FROM day_accommodations WHERE trip_id = ?'
-    ).get(trip.id) as any;
+    const accommodationId = testDb.prepare('SELECT id FROM day_accommodations WHERE trip_id = ?').get(trip.id) as any;
     expect(accommodationId).toBeDefined();
 
-    const budgetBefore = testDb.prepare(
-      'SELECT id FROM budget_items WHERE trip_id = ?'
-    ).get(trip.id);
+    const budgetBefore = testDb.prepare('SELECT id FROM budget_items WHERE trip_id = ?').get(trip.id);
     expect(budgetBefore).toBeDefined();
 
     // Delete via the accommodation endpoint (the primary bug path)
@@ -539,9 +546,7 @@ describe('Accommodations', () => {
       .set('Cookie', authCookie(user.id));
     expect(delRes.status).toBe(200);
 
-    const budgetAfter = testDb.prepare(
-      'SELECT id FROM budget_items WHERE trip_id = ?'
-    ).get(trip.id);
+    const budgetAfter = testDb.prepare('SELECT id FROM budget_items WHERE trip_id = ?').get(trip.id);
     expect(budgetAfter).toBeUndefined();
   });
 });

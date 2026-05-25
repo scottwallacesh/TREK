@@ -2,6 +2,19 @@
  * Unit tests for packingService.ts — uncovered functions.
  * Covers PACK-SVC-001 to PACK-SVC-012.
  */
+import { runMigrations } from '../../../src/db/migrations';
+import { createTables } from '../../../src/db/schema';
+import {
+  saveAsTemplate,
+  applyTemplate,
+  setBagMembers,
+  createBag,
+  deleteBag,
+  bulkImport,
+} from '../../../src/services/packingService';
+import { createUser, createTrip } from '../../helpers/factories';
+import { resetTestDb } from '../../helpers/test-db';
+
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
 // ── DB mock setup (vi.hoisted so it is available before vi.mock calls) ────────
@@ -30,19 +43,6 @@ vi.mock('../../../src/config', () => ({
   updateJwtSecret: () => {},
 }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
-import { resetTestDb } from '../../helpers/test-db';
-import { createUser, createTrip } from '../../helpers/factories';
-import {
-  saveAsTemplate,
-  applyTemplate,
-  setBagMembers,
-  createBag,
-  deleteBag,
-  bulkImport,
-} from '../../../src/services/packingService';
-
 // ── Lifecycle ─────────────────────────────────────────────────────────────────
 
 beforeAll(() => {
@@ -65,9 +65,15 @@ describe('saveAsTemplate', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, ?)').run(trip.id, 'Shirt', 'Clothes', 0);
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, ?)').run(trip.id, 'Shorts', 'Clothes', 1);
-    testDb.prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, ?)').run(trip.id, 'Toothbrush', 'Toiletries', 2);
+    testDb
+      .prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, ?)')
+      .run(trip.id, 'Shirt', 'Clothes', 0);
+    testDb
+      .prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, ?)')
+      .run(trip.id, 'Shorts', 'Clothes', 1);
+    testDb
+      .prepare('INSERT INTO packing_items (trip_id, name, category, checked, sort_order) VALUES (?, ?, ?, 0, ?)')
+      .run(trip.id, 'Toothbrush', 'Toiletries', 2);
 
     const result = saveAsTemplate(trip.id, user.id, 'My Template');
 
@@ -100,14 +106,22 @@ describe('applyTemplate', () => {
     const trip = createTrip(testDb, user.id);
 
     // Insert a template with one category and two items directly
-    const templateResult = testDb.prepare('INSERT INTO packing_templates (name, created_by) VALUES (?, ?)').run('Camping', user.id);
+    const templateResult = testDb
+      .prepare('INSERT INTO packing_templates (name, created_by) VALUES (?, ?)')
+      .run('Camping', user.id);
     const templateId = templateResult.lastInsertRowid as number;
 
-    const catResult = testDb.prepare('INSERT INTO packing_template_categories (template_id, name, sort_order) VALUES (?, ?, ?)').run(templateId, 'Gear', 0);
+    const catResult = testDb
+      .prepare('INSERT INTO packing_template_categories (template_id, name, sort_order) VALUES (?, ?, ?)')
+      .run(templateId, 'Gear', 0);
     const catId = catResult.lastInsertRowid as number;
 
-    testDb.prepare('INSERT INTO packing_template_items (category_id, name, sort_order) VALUES (?, ?, ?)').run(catId, 'Tent', 0);
-    testDb.prepare('INSERT INTO packing_template_items (category_id, name, sort_order) VALUES (?, ?, ?)').run(catId, 'Sleeping Bag', 1);
+    testDb
+      .prepare('INSERT INTO packing_template_items (category_id, name, sort_order) VALUES (?, ?, ?)')
+      .run(catId, 'Tent', 0);
+    testDb
+      .prepare('INSERT INTO packing_template_items (category_id, name, sort_order) VALUES (?, ?, ?)')
+      .run(catId, 'Sleeping Bag', 1);
 
     const result = applyTemplate(trip.id, templateId);
 
@@ -125,7 +139,9 @@ describe('applyTemplate', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    const templateResult = testDb.prepare('INSERT INTO packing_templates (name, created_by) VALUES (?, ?)').run('Empty Template', user.id);
+    const templateResult = testDb
+      .prepare('INSERT INTO packing_templates (name, created_by) VALUES (?, ?)')
+      .run('Empty Template', user.id);
     const templateId = templateResult.lastInsertRowid as number;
 
     const result = applyTemplate(trip.id, templateId);
@@ -225,7 +241,9 @@ describe('bulkImport with bag field', () => {
     expect(result).toHaveLength(1);
     expect(result[0]).toBeDefined();
 
-    const bags = testDb.prepare('SELECT * FROM packing_bags WHERE trip_id = ? AND name = ?').all(trip.id, 'Carry-On') as any[];
+    const bags = testDb
+      .prepare('SELECT * FROM packing_bags WHERE trip_id = ? AND name = ?')
+      .all(trip.id, 'Carry-On') as any[];
     expect(bags).toHaveLength(1);
 
     const items = testDb.prepare('SELECT * FROM packing_items WHERE trip_id = ?').all(trip.id) as any[];
@@ -244,7 +262,9 @@ describe('bulkImport with bag field', () => {
 
     expect(result).toHaveLength(2);
 
-    const bags = testDb.prepare('SELECT * FROM packing_bags WHERE trip_id = ? AND name = ?').all(trip.id, 'Carry-On') as any[];
+    const bags = testDb
+      .prepare('SELECT * FROM packing_bags WHERE trip_id = ? AND name = ?')
+      .all(trip.id, 'Carry-On') as any[];
     expect(bags).toHaveLength(1);
 
     const items = testDb.prepare('SELECT * FROM packing_items WHERE trip_id = ?').all(trip.id) as any[];

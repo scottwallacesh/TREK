@@ -1,6 +1,7 @@
-import { CanActivate, ExecutionContext, HttpException, Injectable } from '@nestjs/common';
-import type { Request } from 'express';
 import type { User } from '../../types';
+import { CanActivate, ExecutionContext, HttpException, Injectable } from '@nestjs/common';
+
+import type { Request } from 'express';
 
 /**
  * Mirrors the legacy `adminOnly` middleware: requires an authenticated admin.

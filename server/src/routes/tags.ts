@@ -1,7 +1,8 @@
-import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
-import { AuthRequest } from '../types';
 import * as tagService from '../services/tagService';
+import { AuthRequest } from '../types';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 

@@ -1,9 +1,5 @@
-import express, { Request, Response } from 'express';
 import { db } from '../db/database';
 import { authenticate } from '../middleware/auth';
-import { broadcast } from '../websocket';
-import { checkPermission } from '../services/permissions';
-import { AuthRequest } from '../types';
 import {
   verifyTripAccess,
   listItems,
@@ -22,6 +18,11 @@ import {
   updateCategoryAssignees,
   reorderItems,
 } from '../services/packingService';
+import { checkPermission } from '../services/permissions';
+import { AuthRequest } from '../types';
+import { broadcast } from '../websocket';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router({ mergeParams: true });
 
@@ -45,10 +46,13 @@ router.post('/import', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
-  if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'items must be a non-empty array' });
+  if (!Array.isArray(items) || items.length === 0)
+    return res.status(400).json({ error: 'items must be a non-empty array' });
 
   const created = bulkImport(tripId, items);
 
@@ -66,7 +70,9 @@ router.post('/', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   if (!name) return res.status(400).json({ error: 'Item name is required' });
@@ -84,7 +90,9 @@ router.put('/reorder', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   reorderItems(tripId, orderedIds);
@@ -99,10 +107,17 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
-  const updated = updateItem(tripId, id, { name, checked, category, weight_grams, bag_id, quantity }, Object.keys(req.body));
+  const updated = updateItem(
+    tripId,
+    id,
+    { name, checked, category, weight_grams, bag_id, quantity },
+    Object.keys(req.body),
+  );
   if (!updated) return res.status(404).json({ error: 'Item not found' });
 
   res.json({ item: updated });
@@ -116,7 +131,9 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   if (!deleteItem(tripId, id)) return res.status(404).json({ error: 'Item not found' });
@@ -142,7 +159,9 @@ router.post('/bags', authenticate, (req: Request, res: Response) => {
   const { name, color } = req.body;
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
   if (!name?.trim()) return res.status(400).json({ error: 'Name is required' });
   const bag = createBag(tripId, { name, color });
@@ -156,7 +175,9 @@ router.put('/bags/:bagId', authenticate, (req: Request, res: Response) => {
   const { name, color, weight_limit_grams, user_id } = req.body;
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
   const updated = updateBag(tripId, bagId, { name, color, weight_limit_grams, user_id }, Object.keys(req.body));
   if (!updated) return res.status(404).json({ error: 'Bag not found' });
@@ -169,7 +190,9 @@ router.delete('/bags/:bagId', authenticate, (req: Request, res: Response) => {
   const { tripId, bagId } = req.params;
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
   if (!deleteBag(tripId, bagId)) return res.status(404).json({ error: 'Bag not found' });
   res.json({ success: true });
@@ -185,7 +208,9 @@ router.post('/apply-template/:templateId', authenticate, (req: Request, res: Res
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const added = applyTemplate(tripId, templateId);
@@ -203,12 +228,19 @@ router.put('/bags/:bagId/members', authenticate, (req: Request, res: Response) =
   const { user_ids } = req.body;
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
   const members = setBagMembers(tripId, bagId, Array.isArray(user_ids) ? user_ids : []);
   if (!members) return res.status(404).json({ error: 'Bag not found' });
   res.json({ members });
-  broadcast(tripId, 'packing:bag-members-updated', { bagId: Number(bagId), members }, req.headers['x-socket-id'] as string);
+  broadcast(
+    tripId,
+    'packing:bag-members-updated',
+    { bagId: Number(bagId), members },
+    req.headers['x-socket-id'] as string,
+  );
 });
 
 // ── Save as Template ───────────────────────────────────────────────────────
@@ -249,7 +281,9 @@ router.put('/category-assignees/:categoryName', authenticate, (req: Request, res
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('packing_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const cat = decodeURIComponent(categoryName);
@@ -263,7 +297,18 @@ router.put('/category-assignees/:categoryName', authenticate, (req: Request, res
     import('../services/notificationService').then(({ send }) => {
       const tripInfo = db.prepare('SELECT title FROM trips WHERE id = ?').get(tripId) as { title: string } | undefined;
       // Use trip scope so the service resolves recipients — actor is excluded automatically
-      send({ event: 'packing_tagged', actorId: authReq.user.id, scope: 'trip', targetId: Number(tripId), params: { trip: tripInfo?.title || 'Untitled', actor: authReq.user.email, category: cat, tripId: String(tripId) } }).catch(() => {});
+      send({
+        event: 'packing_tagged',
+        actorId: authReq.user.id,
+        scope: 'trip',
+        targetId: Number(tripId),
+        params: {
+          trip: tripInfo?.title || 'Untitled',
+          actor: authReq.user.email,
+          category: cat,
+          tripId: String(tripId),
+        },
+      }).catch(() => {});
     });
   }
 });

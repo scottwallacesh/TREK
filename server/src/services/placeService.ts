@@ -1,9 +1,6 @@
-import { XMLParser, XMLValidator } from 'fast-xml-parser';
-import unzipper from 'unzipper';
 import { db, getPlaceWithTags } from '../db/database';
-import { loadTagsByPlaceIds } from './queryHelpers';
-import { checkSsrf } from '../utils/ssrfGuard';
 import { Place } from '../types';
+import { checkSsrf } from '../utils/ssrfGuard';
 import {
   buildCategoryNameLookup,
   createKmlImportSummary,
@@ -13,6 +10,10 @@ import {
   resolveCategoryIdForFolder,
   type KmlImportSummary,
 } from './kmlImport';
+import { loadTagsByPlaceIds } from './queryHelpers';
+
+import { XMLParser, XMLValidator } from 'fast-xml-parser';
+import unzipper from 'unzipper';
 
 interface PlaceWithCategory extends Place {
   category_name: string | null;
@@ -21,7 +22,14 @@ interface PlaceWithCategory extends Place {
 }
 
 interface UnsplashSearchResponse {
-  results?: { id: string; urls?: { regular?: string; thumb?: string }; description?: string; alt_description?: string; user?: { name?: string }; links?: { html?: string } }[];
+  results?: {
+    id: string;
+    urls?: { regular?: string; thumb?: string };
+    description?: string;
+    alt_description?: string;
+    user?: { name?: string };
+    links?: { html?: string };
+  }[];
   errors?: string[];
 }
 
@@ -75,17 +83,19 @@ export function listPlaces(
 
   const places = db.prepare(query).all(...params) as PlaceWithCategory[];
 
-  const placeIds = places.map(p => p.id);
+  const placeIds = places.map((p) => p.id);
   const tagsByPlaceId = loadTagsByPlaceIds(placeIds);
 
-  return places.map(p => ({
+  return places.map((p) => ({
     ...p,
-    category: p.category_id ? {
-      id: p.category_id,
-      name: p.category_name,
-      color: p.category_color,
-      icon: p.category_icon,
-    } : null,
+    category: p.category_id
+      ? {
+          id: p.category_id,
+          name: p.category_name,
+          color: p.category_color,
+          icon: p.category_icon,
+        }
+      : null,
     tags: tagsByPlaceId[p.id] || [],
   }));
 }
@@ -97,32 +107,79 @@ export function listPlaces(
 export function createPlace(
   tripId: string,
   body: {
-    name: string; description?: string; lat?: number; lng?: number; address?: string;
-    category_id?: number; price?: number; currency?: string;
-    place_time?: string; end_time?: string;
-    duration_minutes?: number; notes?: string; image_url?: string;
-    google_place_id?: string; osm_id?: string; website?: string; phone?: string;
-    transport_mode?: string; tags?: number[];
+    name: string;
+    description?: string;
+    lat?: number;
+    lng?: number;
+    address?: string;
+    category_id?: number;
+    price?: number;
+    currency?: string;
+    place_time?: string;
+    end_time?: string;
+    duration_minutes?: number;
+    notes?: string;
+    image_url?: string;
+    google_place_id?: string;
+    osm_id?: string;
+    website?: string;
+    phone?: string;
+    transport_mode?: string;
+    tags?: number[];
   },
 ) {
   const {
-    name, description, lat, lng, address, category_id, price, currency,
-    place_time, end_time,
-    duration_minutes, notes, image_url, google_place_id, osm_id, website, phone,
-    transport_mode, tags = [],
+    name,
+    description,
+    lat,
+    lng,
+    address,
+    category_id,
+    price,
+    currency,
+    place_time,
+    end_time,
+    duration_minutes,
+    notes,
+    image_url,
+    google_place_id,
+    osm_id,
+    website,
+    phone,
+    transport_mode,
+    tags = [],
   } = body;
 
-  const result = db.prepare(`
+  const result = db
+    .prepare(
+      `
     INSERT INTO places (trip_id, name, description, lat, lng, address, category_id, price, currency,
       place_time, end_time,
       duration_minutes, notes, image_url, google_place_id, osm_id, website, phone, transport_mode)
     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `).run(
-    tripId, name, description || null, lat || null, lng || null, address || null,
-    category_id || null, price || null, currency || null,
-    place_time || null, end_time || null, duration_minutes || 60, notes || null, image_url || null,
-    google_place_id || null, osm_id || null, website || null, phone || null, transport_mode || 'walking',
-  );
+  `,
+    )
+    .run(
+      tripId,
+      name,
+      description || null,
+      lat || null,
+      lng || null,
+      address || null,
+      category_id || null,
+      price || null,
+      currency || null,
+      place_time || null,
+      end_time || null,
+      duration_minutes || 60,
+      notes || null,
+      image_url || null,
+      google_place_id || null,
+      osm_id || null,
+      website || null,
+      phone || null,
+      transport_mode || 'walking',
+    );
 
   const placeId = result.lastInsertRowid;
 
@@ -154,25 +211,56 @@ export function updatePlace(
   tripId: string,
   placeId: string,
   body: {
-    name?: string; description?: string; lat?: number; lng?: number; address?: string;
-    category_id?: number; price?: number; currency?: string;
-    place_time?: string; end_time?: string;
-    duration_minutes?: number; notes?: string; image_url?: string;
-    google_place_id?: string; osm_id?: string; website?: string; phone?: string;
-    transport_mode?: string; tags?: number[];
+    name?: string;
+    description?: string;
+    lat?: number;
+    lng?: number;
+    address?: string;
+    category_id?: number;
+    price?: number;
+    currency?: string;
+    place_time?: string;
+    end_time?: string;
+    duration_minutes?: number;
+    notes?: string;
+    image_url?: string;
+    google_place_id?: string;
+    osm_id?: string;
+    website?: string;
+    phone?: string;
+    transport_mode?: string;
+    tags?: number[];
   },
 ) {
-  const existingPlace = db.prepare('SELECT * FROM places WHERE id = ? AND trip_id = ?').get(placeId, tripId) as Place | undefined;
+  const existingPlace = db.prepare('SELECT * FROM places WHERE id = ? AND trip_id = ?').get(placeId, tripId) as
+    | Place
+    | undefined;
   if (!existingPlace) return null;
 
   const {
-    name, description, lat, lng, address, category_id, price, currency,
-    place_time, end_time,
-    duration_minutes, notes, image_url, google_place_id, osm_id, website, phone,
-    transport_mode, tags,
+    name,
+    description,
+    lat,
+    lng,
+    address,
+    category_id,
+    price,
+    currency,
+    place_time,
+    end_time,
+    duration_minutes,
+    notes,
+    image_url,
+    google_place_id,
+    osm_id,
+    website,
+    phone,
+    transport_mode,
+    tags,
   } = body;
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE places SET
       name = COALESCE(?, name),
       description = ?,
@@ -194,7 +282,8 @@ export function updatePlace(
       transport_mode = COALESCE(?, transport_mode),
       updated_at = CURRENT_TIMESTAMP
     WHERE id = ?
-  `).run(
+  `,
+  ).run(
     name || null,
     description !== undefined ? description : existingPlace.description,
     lat !== undefined ? lat : existingPlace.lat,
@@ -322,8 +411,8 @@ function isPlaceDuplicate(
   if (candidate.lat != null && candidate.lng != null) {
     return dedup.coords.some(
       (c) =>
-        Math.abs(c.lat - candidate.lat!) <= COORD_DEDUP_TOLERANCE &&
-        Math.abs(c.lng - candidate.lng!) <= COORD_DEDUP_TOLERANCE,
+        Math.abs(c.lat - candidate.lat) <= COORD_DEDUP_TOLERANCE &&
+        Math.abs(c.lng - candidate.lng) <= COORD_DEDUP_TOLERANCE,
     );
   }
   return false;
@@ -361,7 +450,10 @@ export function importGpx(tripId: string, fileBuffer: Buffer, opts: GpxImportOpt
   if (!gpx) return null;
 
   const str = (v: unknown) => (v != null ? String(v).trim() : null);
-  const num = (v: unknown) => { const n = parseFloat(String(v)); return isNaN(n) ? null : n; };
+  const num = (v: unknown) => {
+    const n = parseFloat(String(v));
+    return isNaN(n) ? null : n;
+  };
 
   type WaypointEntry = { name: string; lat: number; lng: number; description: string | null; routeGeometry?: string };
   const waypoints: WaypointEntry[] = [];
@@ -372,7 +464,12 @@ export function importGpx(tripId: string, fileBuffer: Buffer, opts: GpxImportOpt
       const lat = num(wpt['@_lat']);
       const lng = num(wpt['@_lon']);
       if (lat === null || lng === null) continue;
-      waypoints.push({ lat, lng, name: str(wpt.name) || `Waypoint ${waypoints.length + 1}`, description: str(wpt.desc) });
+      waypoints.push({
+        lat,
+        lng,
+        name: str(wpt.name) || `Waypoint ${waypoints.length + 1}`,
+        description: str(wpt.desc),
+      });
     }
   }
 
@@ -381,11 +478,19 @@ export function importGpx(tripId: string, fileBuffer: Buffer, opts: GpxImportOpt
     for (const rte of gpx.rte ?? []) {
       const pts = (rte.rtept ?? [])
         .map((pt: Record<string, unknown>) => ({ lat: num(pt['@_lat']), lng: num(pt['@_lon']), ele: num(pt['ele']) }))
-        .filter((p: { lat: number | null; lng: number | null; ele: number | null }) => p.lat !== null && p.lng !== null) as Array<{ lat: number; lng: number; ele: number | null }>;
+        .filter(
+          (p: { lat: number | null; lng: number | null; ele: number | null }) => p.lat !== null && p.lng !== null,
+        ) as Array<{ lat: number; lng: number; ele: number | null }>;
       if (pts.length === 0) continue;
-      const hasAllEle = pts.every(p => p.ele !== null);
-      const routeGeometry = pts.map(p => hasAllEle ? [p.lat, p.lng, p.ele] : [p.lat, p.lng]);
-      waypoints.push({ lat: pts[0].lat, lng: pts[0].lng, name: str(rte.name) || 'GPX Route', description: str(rte.desc), routeGeometry: JSON.stringify(routeGeometry) });
+      const hasAllEle = pts.every((p) => p.ele !== null);
+      const routeGeometry = pts.map((p) => (hasAllEle ? [p.lat, p.lng, p.ele] : [p.lat, p.lng]));
+      waypoints.push({
+        lat: pts[0].lat,
+        lng: pts[0].lng,
+        name: str(rte.name) || 'GPX Route',
+        description: str(rte.desc),
+        routeGeometry: JSON.stringify(routeGeometry),
+      });
     }
   }
 
@@ -403,9 +508,15 @@ export function importGpx(tripId: string, fileBuffer: Buffer, opts: GpxImportOpt
       }
       if (trackPoints.length === 0) continue;
       const start = trackPoints[0];
-      const hasAllEle = trackPoints.every(p => p.ele !== null);
-      const routeGeometry = trackPoints.map(p => hasAllEle ? [p.lat, p.lng, p.ele] : [p.lat, p.lng]);
-      waypoints.push({ lat: start.lat, lng: start.lng, name: str(trk.name) || 'GPX Track', description: str(trk.desc), routeGeometry: JSON.stringify(routeGeometry) });
+      const hasAllEle = trackPoints.every((p) => p.ele !== null);
+      const routeGeometry = trackPoints.map((p) => (hasAllEle ? [p.lat, p.lng, p.ele] : [p.lat, p.lng]));
+      waypoints.push({
+        lat: start.lat,
+        lng: start.lng,
+        name: str(trk.name) || 'GPX Track',
+        description: str(trk.desc),
+        routeGeometry: JSON.stringify(routeGeometry),
+      });
     }
   }
 
@@ -549,7 +660,9 @@ export async function unpackKmzToKml(
     throw new Error('Invalid KMZ archive.');
   }
 
-  const kmlEntries = zip.files.filter((entry) => !entry.path.endsWith('/') && entry.path.toLowerCase().endsWith('.kml'));
+  const kmlEntries = zip.files.filter(
+    (entry) => !entry.path.endsWith('/') && entry.path.toLowerCase().endsWith('.kml'),
+  );
   if (kmlEntries.length === 0) {
     throw new Error('KMZ archive does not contain a KML file.');
   }
@@ -563,12 +676,21 @@ export async function unpackKmzToKml(
   return preferredEntry.buffer();
 }
 
-export async function importKmzPlaces(tripId: string, kmzBuffer: Buffer, opts: KmlImportOptions = {}): Promise<PlaceImportResult> {
+export async function importKmzPlaces(
+  tripId: string,
+  kmzBuffer: Buffer,
+  opts: KmlImportOptions = {},
+): Promise<PlaceImportResult> {
   const kmlBuffer = await unpackKmzToKml(kmzBuffer);
   return importKmlPlaces(tripId, kmlBuffer, opts);
 }
 
-export async function importMapFile(tripId: string, fileBuffer: Buffer, filename: string, opts: KmlImportOptions = {}): Promise<PlaceImportResult> {
+export async function importMapFile(
+  tripId: string,
+  fileBuffer: Buffer,
+  filename: string,
+  opts: KmlImportOptions = {},
+): Promise<PlaceImportResult> {
   const ext = filename.toLowerCase().split('.').pop();
   if (ext === 'kmz') return importKmzPlaces(tripId, fileBuffer, opts);
   if (ext === 'kml') return importKmlPlaces(tripId, fileBuffer, opts);
@@ -610,7 +732,10 @@ export async function importGoogleList(tripId: string, url: string) {
   // Fetch list data from Google Maps internal API
   const apiUrl = `https://www.google.com/maps/preview/entitylist/getlist?authuser=0&hl=en&gl=us&pb=!1m1!1s${encodeURIComponent(listId)}!2e2!3e2!4i500!16b1`;
   const apiRes = await fetch(apiUrl, {
-    headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36' },
+    headers: {
+      'User-Agent':
+        'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+    },
     signal: AbortSignal.timeout(15000),
   });
 
@@ -693,7 +818,11 @@ export async function importNaverList(
 
   // Resolve naver.me short links to the canonical map.naver.com folder URL.
   let parsedUrl: URL;
-  try { parsedUrl = new URL(url); } catch { return { error: 'Invalid URL', status: 400 }; }
+  try {
+    parsedUrl = new URL(url);
+  } catch {
+    return { error: 'Invalid URL', status: 400 };
+  }
   if (parsedUrl.hostname === 'naver.me') {
     const redirectRes = await fetch(url, { redirect: 'follow', signal: AbortSignal.timeout(10000) });
     resolvedUrl = redirectRes.url;
@@ -710,7 +839,8 @@ export async function importNaverList(
     const apiRes = await fetch(apiUrl, {
       headers: {
         Accept: 'application/json',
-        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+        'User-Agent':
+          'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
       },
       signal: AbortSignal.timeout(15000),
     });
@@ -720,7 +850,7 @@ export async function importNaverList(
     }
 
     try {
-      const data = await apiRes.json() as {
+      const data = (await apiRes.json()) as {
         folder?: { bookmarkCount?: number; name?: string };
         bookmarkList?: any[];
       };
@@ -736,9 +866,10 @@ export async function importNaverList(
   }
 
   const listName = firstPage.data.folder?.name || 'Naver Maps List';
-  const totalCount = typeof firstPage.data.folder?.bookmarkCount === 'number'
-    ? firstPage.data.folder.bookmarkCount
-    : (firstPage.data.bookmarkList?.length || 0);
+  const totalCount =
+    typeof firstPage.data.folder?.bookmarkCount === 'number'
+      ? firstPage.data.folder.bookmarkCount
+      : firstPage.data.bookmarkList?.length || 0;
 
   const allItems: any[] = [...(firstPage.data.bookmarkList || [])];
   for (let start = limit; start < totalCount; start += limit) {
@@ -759,9 +890,12 @@ export async function importNaverList(
   for (const item of allItems) {
     const lat = Number(item?.py);
     const lng = Number(item?.px);
-    const name = typeof item?.name === 'string' && item.name.trim()
-      ? item.name.trim()
-      : (typeof item?.displayName === 'string' ? item.displayName.trim() : '');
+    const name =
+      typeof item?.name === 'string' && item.name.trim()
+        ? item.name.trim()
+        : typeof item?.displayName === 'string'
+          ? item.displayName.trim()
+          : '';
     const note = typeof item?.memo === 'string' && item.memo.trim() ? item.memo.trim() : null;
     const address = typeof item?.address === 'string' && item.address.trim() ? item.address.trim() : null;
 
@@ -803,10 +937,14 @@ export async function importNaverList(
 // ---------------------------------------------------------------------------
 
 export async function searchPlaceImage(tripId: string, placeId: string, userId: number) {
-  const place = db.prepare('SELECT * FROM places WHERE id = ? AND trip_id = ?').get(placeId, tripId) as Place | undefined;
+  const place = db.prepare('SELECT * FROM places WHERE id = ? AND trip_id = ?').get(placeId, tripId) as
+    | Place
+    | undefined;
   if (!place) return { error: 'Place not found', status: 404 };
 
-  const user = db.prepare('SELECT unsplash_api_key FROM users WHERE id = ?').get(userId) as { unsplash_api_key: string | null } | undefined;
+  const user = db.prepare('SELECT unsplash_api_key FROM users WHERE id = ?').get(userId) as
+    | { unsplash_api_key: string | null }
+    | undefined;
   if (!user || !user.unsplash_api_key) {
     return { error: 'No Unsplash API key configured', status: 400 };
   }
@@ -815,7 +953,7 @@ export async function searchPlaceImage(tripId: string, placeId: string, userId: 
   const response = await fetch(
     `https://api.unsplash.com/search/photos?query=${query}&per_page=5&client_id=${user.unsplash_api_key}`,
   );
-  const data = await response.json() as UnsplashSearchResponse;
+  const data = (await response.json()) as UnsplashSearchResponse;
 
   if (!response.ok) {
     return { error: data.errors?.[0] || 'Unsplash API error', status: response.status };

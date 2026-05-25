@@ -1,67 +1,61 @@
-import Database from 'better-sqlite3';
 import { encrypt_api_key } from '../services/apiKeyCrypto';
+
+import Database from 'better-sqlite3';
 
 /** Returns true if any collision was encountered (renamed row). */
 export function trimUserWhitespace(db: Database.Database): boolean {
   type DirtyRow = { id: number; username?: string; email?: string };
   let hadCollision = false;
 
-  const dirtyUsernames = db.prepare(
-    `SELECT id, username FROM users WHERE username != TRIM(username)`
-  ).all() as DirtyRow[];
+  const dirtyUsernames = db
+    .prepare(`SELECT id, username FROM users WHERE username != TRIM(username)`)
+    .all() as DirtyRow[];
 
   for (const row of dirtyUsernames) {
-    const trimmed = row.username!.trim();
-    const collision = db.prepare(
-      `SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ?`
-    ).get(trimmed, row.id) as { id: number } | undefined;
+    const trimmed = row.username.trim();
+    const collision = db
+      .prepare(`SELECT id FROM users WHERE LOWER(username) = LOWER(?) AND id != ?`)
+      .get(trimmed, row.id) as { id: number } | undefined;
 
     const final = collision ? `${trimmed}__migrated_${row.id}` : trimmed;
     if (collision) {
       hadCollision = true;
       console.warn(
         `[migration] WHITESPACE COLLISION username: user id=${row.id} ` +
-        `original=${JSON.stringify(row.username)} trimmed="${trimmed}" ` +
-        `collides with user id=${collision.id}. Renamed to "${final}". ` +
-        `Manual review required.`
+          `original=${JSON.stringify(row.username)} trimmed="${trimmed}" ` +
+          `collides with user id=${collision.id}. Renamed to "${final}". ` +
+          `Manual review required.`,
       );
     } else {
       console.warn(
-        `[migration] Trimmed username for user id=${row.id}: ` +
-        `${JSON.stringify(row.username)} → "${final}"`
+        `[migration] Trimmed username for user id=${row.id}: ` + `${JSON.stringify(row.username)} → "${final}"`,
       );
     }
     db.prepare(`UPDATE users SET username = ? WHERE id = ?`).run(final, row.id);
   }
 
-  const dirtyEmails = db.prepare(
-    `SELECT id, email FROM users WHERE email != TRIM(email)`
-  ).all() as DirtyRow[];
+  const dirtyEmails = db.prepare(`SELECT id, email FROM users WHERE email != TRIM(email)`).all() as DirtyRow[];
 
   for (const row of dirtyEmails) {
-    const trimmed = row.email!.trim();
-    const collision = db.prepare(
-      `SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND id != ?`
-    ).get(trimmed, row.id) as { id: number } | undefined;
+    const trimmed = row.email.trim();
+    const collision = db
+      .prepare(`SELECT id FROM users WHERE LOWER(email) = LOWER(?) AND id != ?`)
+      .get(trimmed, row.id) as { id: number } | undefined;
 
     let final = trimmed;
     if (collision) {
       hadCollision = true;
       const at = trimmed.lastIndexOf('@');
-      final = at > 0
-        ? `${trimmed.slice(0, at)}__migrated_${row.id}${trimmed.slice(at)}`
-        : `${trimmed}__migrated_${row.id}`;
+      final =
+        at > 0 ? `${trimmed.slice(0, at)}__migrated_${row.id}${trimmed.slice(at)}` : `${trimmed}__migrated_${row.id}`;
       console.warn(
         `[migration] WHITESPACE COLLISION email: user id=${row.id} ` +
-        `original=${JSON.stringify(row.email)} trimmed="${trimmed}" ` +
-        `collides with user id=${collision.id}. Renamed to "${final}". ` +
-        `User cannot sign in with this email until manually corrected.`
+          `original=${JSON.stringify(row.email)} trimmed="${trimmed}" ` +
+          `collides with user id=${collision.id}. Renamed to "${final}". ` +
+          `User cannot sign in with this email until manually corrected.`,
       );
     } else {
-      console.warn(
-        `[migration] Trimmed email for user id=${row.id}: ` +
-        `${JSON.stringify(row.email)} → "${final}"`
-      );
+      console.warn(`[migration] Trimmed email for user id=${row.id}: ` + `${JSON.stringify(row.email)} → "${final}"`);
     }
     db.prepare(`UPDATE users SET email = ? WHERE id = ?`).run(final, row.id);
   }
@@ -75,9 +69,7 @@ function runMigrations(db: Database.Database): void {
   let currentVersion = versionRow?.version ?? 0;
 
   if (currentVersion === 0) {
-    const hasUnsplash = db.prepare(
-      "SELECT 1 FROM pragma_table_info('users') WHERE name = 'unsplash_api_key'"
-    ).get();
+    const hasUnsplash = db.prepare("SELECT 1 FROM pragma_table_info('users') WHERE name = 'unsplash_api_key'").get();
     if (hasUnsplash) {
       currentVersion = 19;
       db.prepare('INSERT INTO schema_version (version) VALUES (?)').run(currentVersion);
@@ -97,7 +89,10 @@ function runMigrations(db: Database.Database): void {
     () => db.exec("ALTER TABLE places ADD COLUMN transport_mode TEXT DEFAULT 'walking'"),
     () => db.exec('ALTER TABLE days ADD COLUMN title TEXT'),
     () => db.exec("ALTER TABLE reservations ADD COLUMN status TEXT DEFAULT 'pending'"),
-    () => db.exec('ALTER TABLE trip_files ADD COLUMN reservation_id INTEGER REFERENCES reservations(id) ON DELETE SET NULL'),
+    () =>
+      db.exec(
+        'ALTER TABLE trip_files ADD COLUMN reservation_id INTEGER REFERENCES reservations(id) ON DELETE SET NULL',
+      ),
     () => db.exec("ALTER TABLE reservations ADD COLUMN type TEXT DEFAULT 'other'"),
     () => db.exec('ALTER TABLE trips ADD COLUMN cover_image TEXT'),
     () => db.exec("ALTER TABLE day_notes ADD COLUMN icon TEXT DEFAULT '📝'"),
@@ -108,7 +103,9 @@ function runMigrations(db: Database.Database): void {
     () => db.exec('ALTER TABLE users ADD COLUMN oidc_issuer TEXT'),
     () => db.exec('ALTER TABLE users ADD COLUMN last_login DATETIME'),
     () => {
-      const schema = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'budget_items'").get() as { sql: string } | undefined;
+      const schema = db.prepare("SELECT sql FROM sqlite_master WHERE name = 'budget_items'").get() as
+        | { sql: string }
+        | undefined;
       if (schema?.sql?.includes('NOT NULL DEFAULT 1')) {
         db.exec(`
           CREATE TABLE budget_items_new (
@@ -130,17 +127,45 @@ function runMigrations(db: Database.Database): void {
       }
     },
     () => {
-      try { db.exec('ALTER TABLE day_accommodations ADD COLUMN check_in TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE day_accommodations ADD COLUMN check_out TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE day_accommodations ADD COLUMN confirmation TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE day_accommodations ADD COLUMN check_in TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE day_accommodations ADD COLUMN check_out TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE day_accommodations ADD COLUMN confirmation TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
-      try { db.exec('ALTER TABLE places ADD COLUMN end_time TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE places ADD COLUMN end_time TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
-      try { db.exec('ALTER TABLE day_assignments ADD COLUMN reservation_status TEXT DEFAULT \'none\''); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE day_assignments ADD COLUMN reservation_notes TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE day_assignments ADD COLUMN reservation_datetime TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec("ALTER TABLE day_assignments ADD COLUMN reservation_status TEXT DEFAULT 'none'");
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE day_assignments ADD COLUMN reservation_notes TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE day_assignments ADD COLUMN reservation_datetime TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
       try {
         db.exec(`
           UPDATE day_assignments SET
@@ -155,7 +180,13 @@ function runMigrations(db: Database.Database): void {
       }
     },
     () => {
-      try { db.exec('ALTER TABLE reservations ADD COLUMN assignment_id INTEGER REFERENCES day_assignments(id) ON DELETE SET NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec(
+          'ALTER TABLE reservations ADD COLUMN assignment_id INTEGER REFERENCES day_assignments(id) ON DELETE SET NULL',
+        );
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
       db.exec(`
@@ -213,14 +244,24 @@ function runMigrations(db: Database.Database): void {
         CREATE INDEX IF NOT EXISTS idx_collab_messages_trip ON collab_messages(trip_id);
       `);
       try {
-        db.prepare("INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES ('collab', 'Collab', 'Notes, polls, and live chat for trip collaboration', 'trip', 'Users', 1, 6)").run();
+        db.prepare(
+          "INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES ('collab', 'Collab', 'Notes, polls, and live chat for trip collaboration', 'trip', 'Users', 1, 6)",
+        ).run();
       } catch (err: any) {
         console.warn('[migrations] Non-fatal migration step failed:', err);
       }
     },
     () => {
-      try { db.exec('ALTER TABLE day_assignments ADD COLUMN assignment_time TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE day_assignments ADD COLUMN assignment_end_time TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE day_assignments ADD COLUMN assignment_time TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE day_assignments ADD COLUMN assignment_end_time TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
       try {
         db.exec(`
           UPDATE day_assignments SET
@@ -258,26 +299,68 @@ function runMigrations(db: Database.Database): void {
       `);
     },
     () => {
-      try { db.exec('ALTER TABLE collab_messages ADD COLUMN deleted INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE collab_messages ADD COLUMN deleted INTEGER DEFAULT 0');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
-      try { db.exec('ALTER TABLE trip_files ADD COLUMN note_id INTEGER REFERENCES collab_notes(id) ON DELETE SET NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE collab_notes ADD COLUMN website TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE trip_files ADD COLUMN note_id INTEGER REFERENCES collab_notes(id) ON DELETE SET NULL');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE collab_notes ADD COLUMN website TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
-      try { db.exec('ALTER TABLE reservations ADD COLUMN reservation_end_time TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE reservations ADD COLUMN reservation_end_time TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
-      try { db.exec('ALTER TABLE places ADD COLUMN osm_id TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE places ADD COLUMN osm_id TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
-      try { db.exec('ALTER TABLE trip_files ADD COLUMN uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE trip_files ADD COLUMN starred INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE trip_files ADD COLUMN deleted_at TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE trip_files ADD COLUMN uploaded_by INTEGER REFERENCES users(id) ON DELETE SET NULL');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE trip_files ADD COLUMN starred INTEGER DEFAULT 0');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE trip_files ADD COLUMN deleted_at TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
-      try { db.exec('ALTER TABLE reservations ADD COLUMN accommodation_id INTEGER REFERENCES day_accommodations(id) ON DELETE SET NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE reservations ADD COLUMN metadata TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec(
+          'ALTER TABLE reservations ADD COLUMN accommodation_id INTEGER REFERENCES day_accommodations(id) ON DELETE SET NULL',
+        );
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE reservations ADD COLUMN metadata TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
       db.exec(`CREATE TABLE IF NOT EXISTS invite_tokens (
@@ -291,8 +374,16 @@ function runMigrations(db: Database.Database): void {
       )`);
     },
     () => {
-      try { db.exec('ALTER TABLE users ADD COLUMN mfa_enabled INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE users ADD COLUMN mfa_secret TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN mfa_enabled INTEGER DEFAULT 0');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN mfa_secret TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
       db.exec(`CREATE TABLE IF NOT EXISTS packing_category_assignees (
@@ -317,7 +408,9 @@ function runMigrations(db: Database.Database): void {
         sort_order INTEGER NOT NULL DEFAULT 0
       )`);
       // Recreate items table with category_id FK (replaces old template_id-based schema)
-      try { db.exec('DROP TABLE IF EXISTS packing_template_items'); } catch (err: any) {
+      try {
+        db.exec('DROP TABLE IF EXISTS packing_template_items');
+      } catch (err: any) {
         console.warn('[migrations] Non-fatal migration step failed:', err);
       }
       db.exec(`CREATE TABLE packing_template_items (
@@ -337,8 +430,16 @@ function runMigrations(db: Database.Database): void {
         sort_order INTEGER DEFAULT 0,
         created_at DATETIME DEFAULT CURRENT_TIMESTAMP
       )`);
-      try { db.exec('ALTER TABLE packing_items ADD COLUMN weight_grams INTEGER'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE packing_items ADD COLUMN bag_id INTEGER REFERENCES packing_bags(id) ON DELETE SET NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE packing_items ADD COLUMN weight_grams INTEGER');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE packing_items ADD COLUMN bag_id INTEGER REFERENCES packing_bags(id) ON DELETE SET NULL');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
       db.exec(`CREATE TABLE IF NOT EXISTS visited_countries (
@@ -363,12 +464,24 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Configurable weekend days
-      try { db.exec("ALTER TABLE vacay_plans ADD COLUMN weekend_days TEXT DEFAULT '0,6'"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec("ALTER TABLE vacay_plans ADD COLUMN weekend_days TEXT DEFAULT '0,6'");
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
       // Immich integration
-      try { db.exec("ALTER TABLE users ADD COLUMN immich_url TEXT"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec("ALTER TABLE users ADD COLUMN immich_api_key TEXT"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN immich_url TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN immich_api_key TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
       db.exec(`CREATE TABLE IF NOT EXISTS trip_photos (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         trip_id INTEGER NOT NULL REFERENCES trips(id) ON DELETE CASCADE,
@@ -380,7 +493,14 @@ function runMigrations(db: Database.Database): void {
       )`);
       // Add memories addon
       try {
-        db.prepare("INSERT INTO addons (id, name, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?)").run('memories', 'Photos', 'trip', 'Image', 0, 7);
+        db.prepare('INSERT INTO addons (id, name, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?)').run(
+          'memories',
+          'Photos',
+          'trip',
+          'Image',
+          0,
+          7,
+        );
       } catch (err: any) {
         console.warn('[migrations] Non-fatal migration step failed:', err);
       }
@@ -401,15 +521,27 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Add day_plan_position to reservations for persistent transport ordering in day timeline
-      try { db.exec('ALTER TABLE reservations ADD COLUMN day_plan_position REAL DEFAULT NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE reservations ADD COLUMN day_plan_position REAL DEFAULT NULL');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
       // Add paid_by_user_id to budget_items for expense tracking / settlement
-      try { db.exec('ALTER TABLE budget_items ADD COLUMN paid_by_user_id INTEGER REFERENCES users(id)'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE budget_items ADD COLUMN paid_by_user_id INTEGER REFERENCES users(id)');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
       // Add target_date to bucket_list for optional visit planning
-      try { db.exec('ALTER TABLE bucket_list ADD COLUMN target_date TEXT DEFAULT NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE bucket_list ADD COLUMN target_date TEXT DEFAULT NULL');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
       // Notification preferences per user
@@ -429,10 +561,26 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Add missing notification preference columns for existing tables
-      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_vacay_invite INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_photos_shared INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_collab_message INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_packing_tagged INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_vacay_invite INTEGER DEFAULT 1');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_photos_shared INTEGER DEFAULT 1');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_collab_message INTEGER DEFAULT 1');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE notification_preferences ADD COLUMN notify_packing_tagged INTEGER DEFAULT 1');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
       // Public share links for read-only trip access
@@ -451,11 +599,31 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Add permission columns to share_tokens
-      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_map INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_bookings INTEGER DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_packing INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_budget INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE share_tokens ADD COLUMN share_collab INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE share_tokens ADD COLUMN share_map INTEGER DEFAULT 1');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE share_tokens ADD COLUMN share_bookings INTEGER DEFAULT 1');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE share_tokens ADD COLUMN share_packing INTEGER DEFAULT 0');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE share_tokens ADD COLUMN share_budget INTEGER DEFAULT 0');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE share_tokens ADD COLUMN share_collab INTEGER DEFAULT 0');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
       // Audit log
@@ -474,10 +642,15 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // MFA backup/recovery codes
-      try { db.exec('ALTER TABLE users ADD COLUMN mfa_backup_codes TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN mfa_backup_codes TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     // MCP long-lived API tokens
-    () => db.exec(`
+    () =>
+      db.exec(`
       CREATE TABLE IF NOT EXISTS mcp_tokens (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
         user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -491,14 +664,16 @@ function runMigrations(db: Database.Database): void {
     // MCP addon entry
     () => {
       try {
-        db.prepare("INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)")
-          .run('mcp', 'MCP', 'Model Context Protocol for AI assistant integration', 'integration', 'Terminal', 0, 12);
+        db.prepare(
+          'INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order) VALUES (?, ?, ?, ?, ?, ?, ?)',
+        ).run('mcp', 'MCP', 'Model Context Protocol for AI assistant integration', 'integration', 'Terminal', 0, 12);
       } catch (err: any) {
         console.warn('[migrations] Non-fatal migration step failed:', err);
       }
     },
     // Index on mcp_tokens.token_hash
-    () => db.exec(`
+    () =>
+      db.exec(`
       CREATE UNIQUE INDEX IF NOT EXISTS idx_mcp_tokens_hash ON mcp_tokens(token_hash)
     `),
     // Ensure MCP addon type is 'integration'
@@ -510,39 +685,61 @@ function runMigrations(db: Database.Database): void {
       }
     },
     () => {
-      try { db.exec('ALTER TABLE places ADD COLUMN route_geometry TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE places ADD COLUMN route_geometry TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
-      try { db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN must_change_password INTEGER DEFAULT 0');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
-      try { db.exec('ALTER TABLE trips ADD COLUMN reminder_days INTEGER DEFAULT 3'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE trips ADD COLUMN reminder_days INTEGER DEFAULT 3');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     // Encrypt any plaintext oidc_client_secret left in app_settings
     () => {
-      const row = db.prepare("SELECT value FROM app_settings WHERE key = 'oidc_client_secret'").get() as { value: string } | undefined;
+      const row = db.prepare("SELECT value FROM app_settings WHERE key = 'oidc_client_secret'").get() as
+        | { value: string }
+        | undefined;
       if (row?.value && !row.value.startsWith('enc:v1:')) {
-        db.prepare("UPDATE app_settings SET value = ? WHERE key = 'oidc_client_secret'").run(encrypt_api_key(row.value));
+        db.prepare("UPDATE app_settings SET value = ? WHERE key = 'oidc_client_secret'").run(
+          encrypt_api_key(row.value),
+        );
       }
     },
     // Encrypt any plaintext smtp_pass left in app_settings
     () => {
-      const row = db.prepare("SELECT value FROM app_settings WHERE key = 'smtp_pass'").get() as { value: string } | undefined;
+      const row = db.prepare("SELECT value FROM app_settings WHERE key = 'smtp_pass'").get() as
+        | { value: string }
+        | undefined;
       if (row?.value && !row.value.startsWith('enc:v1:')) {
         db.prepare("UPDATE app_settings SET value = ? WHERE key = 'smtp_pass'").run(encrypt_api_key(row.value));
       }
     },
     // Encrypt any plaintext immich_api_key values in the users table
     () => {
-      const rows = db.prepare(
-        "SELECT id, immich_api_key FROM users WHERE immich_api_key IS NOT NULL AND immich_api_key != '' AND immich_api_key NOT LIKE 'enc:v1:%'"
-      ).all() as { id: number; immich_api_key: string }[];
+      const rows = db
+        .prepare(
+          "SELECT id, immich_api_key FROM users WHERE immich_api_key IS NOT NULL AND immich_api_key != '' AND immich_api_key NOT LIKE 'enc:v1:%'",
+        )
+        .all() as { id: number; immich_api_key: string }[];
       for (const row of rows) {
         db.prepare('UPDATE users SET immich_api_key = ? WHERE id = ?').run(encrypt_api_key(row.immich_api_key), row.id);
       }
     },
     () => {
-      try { db.exec('ALTER TABLE budget_items ADD COLUMN expense_date TEXT DEFAULT NULL'); } catch {}
+      try {
+        db.exec('ALTER TABLE budget_items ADD COLUMN expense_date TEXT DEFAULT NULL');
+      } catch {}
     },
     () => {
       db.exec(`
@@ -589,7 +786,9 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Normalize trip_photos to provider-based schema used by current routes
-      const tripPhotosExists = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'trip_photos'").get();
+      const tripPhotosExists = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'trip_photos'")
+        .get();
       if (!tripPhotosExists) {
         db.exec(`
           CREATE TABLE trip_photos (
@@ -606,8 +805,12 @@ function runMigrations(db: Database.Database): void {
         `);
       } else {
         const columns = db.prepare("PRAGMA table_info('trip_photos')").all() as Array<{ name: string }>;
-        const names = new Set(columns.map(c => c.name));
-        const assetSource = names.has('asset_id') ? 'asset_id' : (names.has('immich_asset_id') ? 'immich_asset_id' : null);
+        const names = new Set(columns.map((c) => c.name));
+        const assetSource = names.has('asset_id')
+          ? 'asset_id'
+          : names.has('immich_asset_id')
+            ? 'immich_asset_id'
+            : null;
         if (assetSource) {
           const providerExpr = names.has('provider')
             ? "CASE WHEN provider IS NULL OR provider = '' THEN 'immich' ELSE provider END"
@@ -643,7 +846,9 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Normalize trip_album_links to provider + album_id schema used by current routes
-      const linksExists = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'trip_album_links'").get();
+      const linksExists = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'trip_album_links'")
+        .get();
       if (!linksExists) {
         db.exec(`
           CREATE TABLE trip_album_links (
@@ -662,8 +867,12 @@ function runMigrations(db: Database.Database): void {
         `);
       } else {
         const columns = db.prepare("PRAGMA table_info('trip_album_links')").all() as Array<{ name: string }>;
-        const names = new Set(columns.map(c => c.name));
-        const albumIdSource = names.has('album_id') ? 'album_id' : (names.has('immich_album_id') ? 'immich_album_id' : null);
+        const names = new Set(columns.map((c) => c.name));
+        const albumIdSource = names.has('album_id')
+          ? 'album_id'
+          : names.has('immich_album_id')
+            ? 'immich_album_id'
+            : null;
         if (albumIdSource) {
           const providerExpr = names.has('provider')
             ? "CASE WHEN provider IS NULL OR provider = '' THEN 'immich' ELSE provider END"
@@ -671,7 +880,9 @@ function runMigrations(db: Database.Database): void {
           const albumNameExpr = names.has('album_name') ? "COALESCE(album_name, '')" : "''";
           const syncEnabledExpr = names.has('sync_enabled') ? 'COALESCE(sync_enabled, 1)' : '1';
           const lastSyncedExpr = names.has('last_synced_at') ? 'last_synced_at' : 'NULL';
-          const createdAtExpr = names.has('created_at') ? 'COALESCE(created_at, CURRENT_TIMESTAMP)' : 'CURRENT_TIMESTAMP';
+          const createdAtExpr = names.has('created_at')
+            ? 'COALESCE(created_at, CURRENT_TIMESTAMP)'
+            : 'CURRENT_TIMESTAMP';
 
           db.exec(`
             CREATE TABLE trip_album_links_new (
@@ -703,15 +914,32 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Add Synology credential columns for existing databases
-      try { db.exec('ALTER TABLE users ADD COLUMN synology_url TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE users ADD COLUMN synology_username TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE users ADD COLUMN synology_password TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE users ADD COLUMN synology_sid TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN synology_url TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN synology_username TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN synology_password TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN synology_sid TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     () => {
       // Seed Synology Photos provider and fields in existing databases
       try {
-        db.prepare(`
+        db.prepare(
+          `
           INSERT INTO photo_providers (id, name, description, icon, enabled, sort_order)
           VALUES (?, ?, ?, ?, ?, ?)
           ON CONFLICT(id) DO UPDATE SET
@@ -720,7 +948,8 @@ function runMigrations(db: Database.Database): void {
             icon = excluded.icon,
             enabled = excluded.enabled,
             sort_order = excluded.sort_order
-        `).run(
+        `,
+        ).run(
           'synologyphotos',
           'Synology Photos',
           'Synology Photos integration with separate account settings',
@@ -746,9 +975,42 @@ function runMigrations(db: Database.Database): void {
             payload_key = excluded.payload_key,
             sort_order = excluded.sort_order
         `);
-        insertField.run('synologyphotos', 'synology_url', 'providerUrl', 'url', 'https://synology.example.com', 1, 0, 'synology_url', 'synology_url', 0);
-        insertField.run('synologyphotos', 'synology_username', 'providerUsername', 'text', 'Username', 1, 0, 'synology_username', 'synology_username', 1);
-        insertField.run('synologyphotos', 'synology_password', 'providerPassword', 'password', 'Password', 1, 1, null, 'synology_password', 2);
+        insertField.run(
+          'synologyphotos',
+          'synology_url',
+          'providerUrl',
+          'url',
+          'https://synology.example.com',
+          1,
+          0,
+          'synology_url',
+          'synology_url',
+          0,
+        );
+        insertField.run(
+          'synologyphotos',
+          'synology_username',
+          'providerUsername',
+          'text',
+          'Username',
+          1,
+          0,
+          'synology_username',
+          'synology_username',
+          1,
+        );
+        insertField.run(
+          'synologyphotos',
+          'synology_password',
+          'providerPassword',
+          'password',
+          'Password',
+          1,
+          1,
+          null,
+          'synology_password',
+          2,
+        );
       } catch (err: any) {
         if (!err.message?.includes('no such table')) throw err;
       }
@@ -756,14 +1018,14 @@ function runMigrations(db: Database.Database): void {
     () => {
       // Remove the stored config column from photo_providers now that it is generated from provider id.
       const columns = db.prepare("PRAGMA table_info('photo_providers')").all() as Array<{ name: string }>;
-      const names = new Set(columns.map(c => c.name));
+      const names = new Set(columns.map((c) => c.name));
       if (!names.has('config')) return;
 
       db.exec('ALTER TABLE photo_providers DROP COLUMN config');
     },
     () => {
       const columns = db.prepare("PRAGMA table_info('trip_photos')").all() as Array<{ name: string }>;
-      const names = new Set(columns.map(c => c.name));
+      const names = new Set(columns.map((c) => c.name));
       if (names.has('asset_id') && !names.has('immich_asset_id')) return;
       db.exec('ALTER TABLE `trip_photos` RENAME COLUMN immich_asset_id TO asset_id');
       db.exec('ALTER TABLE `trip_photos` ADD COLUMN provider TEXT NOT NULL DEFAULT "immich"');
@@ -772,7 +1034,13 @@ function runMigrations(db: Database.Database): void {
     },
     () => {
       // Track which album link each photo was synced from
-      try { db.exec("ALTER TABLE trip_photos ADD COLUMN album_link_id INTEGER REFERENCES trip_album_links(id) ON DELETE SET NULL DEFAULT NULL"); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec(
+          'ALTER TABLE trip_photos ADD COLUMN album_link_id INTEGER REFERENCES trip_album_links(id) ON DELETE SET NULL DEFAULT NULL',
+        );
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
       db.exec('CREATE INDEX IF NOT EXISTS idx_trip_photos_album_link ON trip_photos(album_link_id)');
     },
     // Migration 68: Todo items
@@ -803,7 +1071,9 @@ function runMigrations(db: Database.Database): void {
       `);
     },
     () => {
-      try {db.exec("UPDATE addons SET enabled = 0 WHERE id = 'memories'");} catch (err) {}
+      try {
+        db.exec("UPDATE addons SET enabled = 0 WHERE id = 'memories'");
+      } catch (err) {}
     },
     // Migration 69: Place region cache for sub-national Atlas regions
     () => {
@@ -846,9 +1116,12 @@ function runMigrations(db: Database.Database): void {
       `);
 
       // Migrate data from old notification_preferences table (may not exist on fresh installs)
-      const tableExists = (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='notification_preferences'").get() as { name: string } | undefined) != null;
+      const tableExists =
+        (db.prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='notification_preferences'").get() as
+          | { name: string }
+          | undefined) != null;
       const oldPrefs: Array<Record<string, number>> = tableExists
-        ? db.prepare('SELECT * FROM notification_preferences').all() as Array<Record<string, number>>
+        ? (db.prepare('SELECT * FROM notification_preferences').all() as Array<Record<string, number>>)
         : [];
       const eventCols: Record<string, string> = {
         trip_invite: 'notify_trip_invite',
@@ -860,7 +1133,7 @@ function runMigrations(db: Database.Database): void {
         packing_tagged: 'notify_packing_tagged',
       };
       const insert = db.prepare(
-        'INSERT OR IGNORE INTO notification_channel_preferences (user_id, event_type, channel, enabled) VALUES (?, ?, ?, ?)'
+        'INSERT OR IGNORE INTO notification_channel_preferences (user_id, event_type, channel, enabled) VALUES (?, ?, ?, ?)',
       );
       const insertMany = db.transaction((rows: Array<[number, string, string, number]>) => {
         for (const [userId, eventType, channel, enabled] of rows) {
@@ -869,11 +1142,11 @@ function runMigrations(db: Database.Database): void {
       });
 
       for (const row of oldPrefs) {
-        const userId = row.user_id as number;
-        const webhookEnabled = (row.notify_webhook as number) ?? 0;
+        const userId = row.user_id;
+        const webhookEnabled = row.notify_webhook ?? 0;
         const rows: Array<[number, string, string, number]> = [];
         for (const [eventType, col] of Object.entries(eventCols)) {
-          const emailEnabled = (row[col] as number) ?? 1;
+          const emailEnabled = row[col] ?? 1;
           // Only insert if disabled (no row = enabled is our default)
           if (!emailEnabled) rows.push([userId, eventType, 'email', 0]);
           if (!webhookEnabled) rows.push([userId, eventType, 'webhook', 0]);
@@ -893,12 +1166,28 @@ function runMigrations(db: Database.Database): void {
     },
     // Migration 73: Add reservation_id to budget_items for linking budget entries to reservations
     () => {
-      try { db.exec('ALTER TABLE budget_items ADD COLUMN reservation_id INTEGER REFERENCES reservations(id) ON DELETE SET NULL DEFAULT NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec(
+          'ALTER TABLE budget_items ADD COLUMN reservation_id INTEGER REFERENCES reservations(id) ON DELETE SET NULL DEFAULT NULL',
+        );
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     // Migration 74: Add quantity to packing_items + user_id to packing_bags + bag_members table
     () => {
-      try { db.exec('ALTER TABLE packing_items ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE packing_bags ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL DEFAULT NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE packing_items ADD COLUMN quantity INTEGER NOT NULL DEFAULT 1');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec(
+          'ALTER TABLE packing_bags ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL DEFAULT NULL',
+        );
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
       db.exec(`
         CREATE TABLE IF NOT EXISTS packing_bag_members (
           bag_id INTEGER NOT NULL REFERENCES packing_bags(id) ON DELETE CASCADE,
@@ -908,7 +1197,10 @@ function runMigrations(db: Database.Database): void {
         CREATE INDEX IF NOT EXISTS idx_packing_bag_members_bag ON packing_bag_members(bag_id);
       `);
       // Migrate existing single user_id to bag_members
-      const bagsWithUser = db.prepare('SELECT id, user_id FROM packing_bags WHERE user_id IS NOT NULL').all() as { id: number; user_id: number }[];
+      const bagsWithUser = db.prepare('SELECT id, user_id FROM packing_bags WHERE user_id IS NOT NULL').all() as {
+        id: number;
+        user_id: number;
+      }[];
       const ins = db.prepare('INSERT OR IGNORE INTO packing_bag_members (bag_id, user_id) VALUES (?, ?)');
       for (const b of bagsWithUser) ins.run(b.id, b.user_id);
     },
@@ -923,13 +1215,21 @@ function runMigrations(db: Database.Database): void {
         );
       `);
       // Migrate existing global positions to per-day entries
-      const reservations = db.prepare('SELECT id, trip_id, reservation_time, reservation_end_time, day_plan_position FROM reservations WHERE day_plan_position IS NOT NULL').all() as any[];
-      const ins = db.prepare('INSERT OR IGNORE INTO reservation_day_positions (reservation_id, day_id, position) VALUES (?, ?, ?)');
+      const reservations = db
+        .prepare(
+          'SELECT id, trip_id, reservation_time, reservation_end_time, day_plan_position FROM reservations WHERE day_plan_position IS NOT NULL',
+        )
+        .all() as any[];
+      const ins = db.prepare(
+        'INSERT OR IGNORE INTO reservation_day_positions (reservation_id, day_id, position) VALUES (?, ?, ?)',
+      );
       for (const r of reservations) {
         const startDate = r.reservation_time?.split('T')[0];
         const endDate = r.reservation_end_time?.split('T')[0] || startDate;
         if (!startDate) continue;
-        const matchingDays = db.prepare('SELECT id FROM days WHERE trip_id = ? AND date >= ? AND date <= ?').all(r.trip_id, startDate, endDate) as { id: number }[];
+        const matchingDays = db
+          .prepare('SELECT id FROM days WHERE trip_id = ? AND date >= ? AND date <= ?')
+          .all(r.trip_id, startDate, endDate) as { id: number }[];
         for (const d of matchingDays) ins.run(r.id, d.id, r.day_plan_position);
       }
     },
@@ -944,22 +1244,39 @@ function runMigrations(db: Database.Database): void {
         );
       `);
       // Seed existing categories with alphabetical order
-      const rows = db.prepare('SELECT DISTINCT trip_id, category FROM budget_items ORDER BY trip_id, category').all() as { trip_id: number; category: string }[];
-      const ins = db.prepare('INSERT OR IGNORE INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?)');
+      const rows = db
+        .prepare('SELECT DISTINCT trip_id, category FROM budget_items ORDER BY trip_id, category')
+        .all() as { trip_id: number; category: string }[];
+      const ins = db.prepare(
+        'INSERT OR IGNORE INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?)',
+      );
       let lastTripId = -1;
       let idx = 0;
       for (const r of rows) {
-        if (r.trip_id !== lastTripId) { lastTripId = r.trip_id; idx = 0; }
+        if (r.trip_id !== lastTripId) {
+          lastTripId = r.trip_id;
+          idx = 0;
+        }
         ins.run(r.trip_id, r.category, idx++);
       }
     },
     // Migration: Naver list import addon (default off)
     () => {
       try {
-        db.prepare(`
+        db.prepare(
+          `
           INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, sort_order)
           VALUES (?, ?, ?, ?, ?, ?, ?)
-        `).run('naver_list_import', 'Naver List Import', 'Import places from shared Naver Maps lists', 'trip', 'Link2', 0, 13);
+        `,
+        ).run(
+          'naver_list_import',
+          'Naver List Import',
+          'Import places from shared Naver Maps lists',
+          'trip',
+          'Link2',
+          0,
+          13,
+        );
       } catch (err: any) {
         console.warn('[migrations] Non-fatal migration step failed:', err);
       }
@@ -1041,7 +1358,9 @@ function runMigrations(db: Database.Database): void {
                 created_via        TEXT NOT NULL DEFAULT 'settings_ui'
               )
             `);
-            db.exec(`INSERT INTO oauth_clients_new SELECT id, user_id, name, client_id, client_secret_hash, redirect_uris, allowed_scopes, created_at, is_public, created_via FROM oauth_clients`);
+            db.exec(
+              `INSERT INTO oauth_clients_new SELECT id, user_id, name, client_id, client_secret_hash, redirect_uris, allowed_scopes, created_at, is_public, created_via FROM oauth_clients`,
+            );
             db.exec(`DROP TABLE oauth_clients`);
             db.exec(`ALTER TABLE oauth_clients_new RENAME TO oauth_clients`);
             db.exec(`CREATE INDEX IF NOT EXISTS idx_oauth_clients_user ON oauth_clients(user_id)`);
@@ -1055,7 +1374,7 @@ function runMigrations(db: Database.Database): void {
     // Migration: Add OTP field, skip_ssl column, device_id (did) column, and hint column for Synology Photos
     () => {
       const cols = db.prepare('PRAGMA table_info(photo_provider_fields)').all() as Array<{ name: string }>;
-      if (!cols.some(c => c.name === 'hint')) {
+      if (!cols.some((c) => c.name === 'hint')) {
         db.exec(`ALTER TABLE photo_provider_fields ADD COLUMN hint TEXT`);
       }
       db.exec(`
@@ -1081,10 +1400,12 @@ function runMigrations(db: Database.Database): void {
     // Migration 84: Journey addon — trip tracking & travel journal
     () => {
       // Register addon (disabled by default — opt-in)
-      db.prepare(`
+      db.prepare(
+        `
         INSERT OR IGNORE INTO addons (id, name, description, type, icon, enabled, config, sort_order)
         VALUES ('journey', 'Journey', 'Trip tracking & travel journal — check-ins, photos, daily stories', 'global', 'Compass', 0, '{}', 35)
-      `).run();
+      `,
+      ).run();
 
       // Core journey table
       db.exec(`
@@ -1194,21 +1515,43 @@ function runMigrations(db: Database.Database): void {
     // Migration 85: Journal — richer entry fields for magazine-style design
     () => {
       // Highlight tags (JSON array), visibility control, hero photo, color accent
-      try { db.exec('ALTER TABLE journey_entries ADD COLUMN highlight_tags TEXT'); } catch {}
-      try { db.exec("ALTER TABLE journey_entries ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'"); } catch {}
-      try { db.exec('ALTER TABLE journey_entries ADD COLUMN hero_photo_id TEXT'); } catch {}
-      try { db.exec('ALTER TABLE journey_entries ADD COLUMN color_accent TEXT'); } catch {}
-      try { db.exec('ALTER TABLE journey_entries ADD COLUMN place_name TEXT'); } catch {}
-      try { db.exec('ALTER TABLE journey_entries ADD COLUMN place_id INTEGER REFERENCES places(id) ON DELETE SET NULL'); } catch {}
-      try { db.exec('ALTER TABLE journey_entries ADD COLUMN lat REAL'); } catch {}
-      try { db.exec('ALTER TABLE journey_entries ADD COLUMN lng REAL'); } catch {}
+      try {
+        db.exec('ALTER TABLE journey_entries ADD COLUMN highlight_tags TEXT');
+      } catch {}
+      try {
+        db.exec("ALTER TABLE journey_entries ADD COLUMN visibility TEXT NOT NULL DEFAULT 'private'");
+      } catch {}
+      try {
+        db.exec('ALTER TABLE journey_entries ADD COLUMN hero_photo_id TEXT');
+      } catch {}
+      try {
+        db.exec('ALTER TABLE journey_entries ADD COLUMN color_accent TEXT');
+      } catch {}
+      try {
+        db.exec('ALTER TABLE journey_entries ADD COLUMN place_name TEXT');
+      } catch {}
+      try {
+        db.exec('ALTER TABLE journey_entries ADD COLUMN place_id INTEGER REFERENCES places(id) ON DELETE SET NULL');
+      } catch {}
+      try {
+        db.exec('ALTER TABLE journey_entries ADD COLUMN lat REAL');
+      } catch {}
+      try {
+        db.exec('ALTER TABLE journey_entries ADD COLUMN lng REAL');
+      } catch {}
 
       // Check-in: allow a single cover photo reference
-      try { db.exec('ALTER TABLE journey_checkins ADD COLUMN photo_id TEXT'); } catch {}
+      try {
+        db.exec('ALTER TABLE journey_checkins ADD COLUMN photo_id TEXT');
+      } catch {}
 
       // Photos: add caption edit timestamp for gallery ordering
-      try { db.exec('ALTER TABLE journey_photos ADD COLUMN width INTEGER'); } catch {}
-      try { db.exec('ALTER TABLE journey_photos ADD COLUMN height INTEGER'); } catch {}
+      try {
+        db.exec('ALTER TABLE journey_photos ADD COLUMN width INTEGER');
+      } catch {}
+      try {
+        db.exec('ALTER TABLE journey_photos ADD COLUMN height INTEGER');
+      } catch {}
     },
     // Migration 86: Journey multi-trip support + sharing/collaboration
     () => {
@@ -1239,15 +1582,17 @@ function runMigrations(db: Database.Database): void {
       db.exec('CREATE INDEX IF NOT EXISTS idx_journey_members_user ON journey_members(user_id)');
 
       // author tracking on entries and checkins
-      try { db.exec('ALTER TABLE journey_entries ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL'); } catch {}
-      try { db.exec('ALTER TABLE journey_checkins ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL'); } catch {}
+      try {
+        db.exec('ALTER TABLE journey_entries ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+      } catch {}
+      try {
+        db.exec('ALTER TABLE journey_checkins ADD COLUMN user_id INTEGER REFERENCES users(id) ON DELETE SET NULL');
+      } catch {}
     },
     // Migration 87: Journey rebuild — new schema with trip sync
     () => {
       // Migrate existing data from old tables into backup, then rebuild
-      const hasOldJourneys = db.prepare(
-        "SELECT 1 FROM sqlite_master WHERE type='table' AND name='journeys'"
-      ).get();
+      const hasOldJourneys = db.prepare("SELECT 1 FROM sqlite_master WHERE type='table' AND name='journeys'").get();
 
       let oldJourneys: any[] = [];
       let oldEntries: any[] = [];
@@ -1255,9 +1600,15 @@ function runMigrations(db: Database.Database): void {
 
       if (hasOldJourneys) {
         // Save existing data before dropping
-        try { oldJourneys = db.prepare('SELECT * FROM journeys').all(); } catch {}
-        try { oldEntries = db.prepare('SELECT * FROM journey_entries').all(); } catch {}
-        try { oldPhotos = db.prepare('SELECT * FROM journey_photos').all(); } catch {}
+        try {
+          oldJourneys = db.prepare('SELECT * FROM journeys').all();
+        } catch {}
+        try {
+          oldEntries = db.prepare('SELECT * FROM journey_entries').all();
+        } catch {}
+        try {
+          oldPhotos = db.prepare('SELECT * FROM journey_photos').all();
+        } catch {}
 
         // Drop all old journey tables
         db.exec('DROP TABLE IF EXISTS journey_location_trail');
@@ -1367,32 +1718,40 @@ function runMigrations(db: Database.Database): void {
         const journeyIdMap = new Map<string, number>(); // old TEXT id -> new INTEGER id
 
         for (const j of oldJourneys) {
-          const res = db.prepare(`
+          const res = db
+            .prepare(
+              `
             INSERT INTO journeys (user_id, title, subtitle, status, created_at, updated_at)
             VALUES (?, ?, ?, ?, ?, ?)
-          `).run(
-            j.user_id,
-            j.title || 'Untitled Journey',
-            j.description || null,
-            j.status || 'draft',
-            j.created_at ? new Date(j.created_at).getTime() : ts,
-            j.updated_at ? new Date(j.updated_at).getTime() : ts
-          );
+          `,
+            )
+            .run(
+              j.user_id,
+              j.title || 'Untitled Journey',
+              j.description || null,
+              j.status || 'draft',
+              j.created_at ? new Date(j.created_at).getTime() : ts,
+              j.updated_at ? new Date(j.updated_at).getTime() : ts,
+            );
           journeyIdMap.set(j.id, Number(res.lastInsertRowid));
 
           // Add owner as contributor
-          db.prepare(`
+          db.prepare(
+            `
             INSERT OR IGNORE INTO journey_contributors (journey_id, user_id, role, added_at)
             VALUES (?, ?, 'owner', ?)
-          `).run(Number(res.lastInsertRowid), j.user_id, ts);
+          `,
+          ).run(Number(res.lastInsertRowid), j.user_id, ts);
 
           // Link trip if old journey had one
           if (j.trip_id) {
             try {
-              db.prepare(`
+              db.prepare(
+                `
                 INSERT OR IGNORE INTO journey_trips (journey_id, trip_id, added_at)
                 VALUES (?, ?, ?)
-              `).run(Number(res.lastInsertRowid), j.trip_id, ts);
+              `,
+              ).run(Number(res.lastInsertRowid), j.trip_id, ts);
             } catch {}
           }
         }
@@ -1403,25 +1762,29 @@ function runMigrations(db: Database.Database): void {
           const newJourneyId = journeyIdMap.get(e.journey_id);
           if (!newJourneyId) continue;
 
-          const res = db.prepare(`
+          const res = db
+            .prepare(
+              `
             INSERT INTO journey_entries (journey_id, author_id, type, title, story, entry_date, entry_time, location_name, location_lat, location_lng, mood, weather, visibility, sort_order, created_at, updated_at)
             VALUES (?, ?, 'entry', ?, ?, ?, NULL, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(
-            newJourneyId,
-            e.user_id || oldJourneys.find((j: any) => j.id === e.journey_id)?.user_id || 1,
-            e.title || null,
-            e.body || null,
-            e.entry_date || new Date().toISOString().split('T')[0],
-            e.place_name || null,
-            e.lat || null,
-            e.lng || null,
-            e.mood || null,
-            e.weather || null,
-            e.visibility || 'private',
-            e.sort_order || 0,
-            e.created_at ? new Date(e.created_at).getTime() : ts,
-            e.updated_at ? new Date(e.updated_at).getTime() : ts
-          );
+          `,
+            )
+            .run(
+              newJourneyId,
+              e.user_id || oldJourneys.find((j: any) => j.id === e.journey_id)?.user_id || 1,
+              e.title || null,
+              e.body || null,
+              e.entry_date || new Date().toISOString().split('T')[0],
+              e.place_name || null,
+              e.lat || null,
+              e.lng || null,
+              e.mood || null,
+              e.weather || null,
+              e.visibility || 'private',
+              e.sort_order || 0,
+              e.created_at ? new Date(e.created_at).getTime() : ts,
+              e.updated_at ? new Date(e.updated_at).getTime() : ts,
+            );
           entryIdMap.set(e.id, Number(res.lastInsertRowid));
         }
 
@@ -1430,10 +1793,12 @@ function runMigrations(db: Database.Database): void {
           const newEntryId = p.entry_id ? entryIdMap.get(p.entry_id) : null;
           if (!newEntryId || !p.file_path) continue;
 
-          db.prepare(`
+          db.prepare(
+            `
             INSERT INTO journey_photos (entry_id, file_path, thumbnail_path, caption, sort_order, width, height, created_at)
             VALUES (?, ?, ?, ?, ?, ?, ?, ?)
-          `).run(
+          `,
+          ).run(
             newEntryId,
             p.file_path,
             p.thumbnail_path || null,
@@ -1441,19 +1806,29 @@ function runMigrations(db: Database.Database): void {
             p.sort_order || 0,
             p.width || null,
             p.height || null,
-            p.created_at ? new Date(p.created_at).getTime() : ts
+            p.created_at ? new Date(p.created_at).getTime() : ts,
           );
         }
 
-        console.log(`[DB] Journey migration: imported ${journeyIdMap.size} journeys, ${entryIdMap.size} entries, photos migrated`);
+        console.log(
+          `[DB] Journey migration: imported ${journeyIdMap.size} journeys, ${entryIdMap.size} entries, photos migrated`,
+        );
       }
     },
     // Migration 88: Journey photos — provider support (Immich/Synology)
     () => {
-      try { db.exec("ALTER TABLE journey_photos ADD COLUMN provider TEXT NOT NULL DEFAULT 'local'"); } catch {}
-      try { db.exec('ALTER TABLE journey_photos ADD COLUMN asset_id TEXT'); } catch {}
-      try { db.exec('ALTER TABLE journey_photos ADD COLUMN owner_id INTEGER REFERENCES users(id)'); } catch {}
-      try { db.exec('ALTER TABLE journey_photos ADD COLUMN shared INTEGER NOT NULL DEFAULT 1'); } catch {}
+      try {
+        db.exec("ALTER TABLE journey_photos ADD COLUMN provider TEXT NOT NULL DEFAULT 'local'");
+      } catch {}
+      try {
+        db.exec('ALTER TABLE journey_photos ADD COLUMN asset_id TEXT');
+      } catch {}
+      try {
+        db.exec('ALTER TABLE journey_photos ADD COLUMN owner_id INTEGER REFERENCES users(id)');
+      } catch {}
+      try {
+        db.exec('ALTER TABLE journey_photos ADD COLUMN shared INTEGER NOT NULL DEFAULT 1');
+      } catch {}
       // file_path was NOT NULL — recreate table to make it nullable
       const hasProvider = db.prepare("SELECT 1 FROM pragma_table_info('journey_photos') WHERE name = 'provider'").get();
       if (hasProvider) {
@@ -1486,11 +1861,15 @@ function runMigrations(db: Database.Database): void {
     },
     // Migration 89: Journey cover image
     () => {
-      try { db.exec('ALTER TABLE journeys ADD COLUMN cover_image TEXT'); } catch {}
+      try {
+        db.exec('ALTER TABLE journeys ADD COLUMN cover_image TEXT');
+      } catch {}
     },
     // Migration 90: Pros/Cons for journey entries
     () => {
-      try { db.exec('ALTER TABLE journey_entries ADD COLUMN pros_cons TEXT'); } catch {}
+      try {
+        db.exec('ALTER TABLE journey_entries ADD COLUMN pros_cons TEXT');
+      } catch {}
     },
     // Migration 91: Journey share tokens
     () => {
@@ -1512,7 +1891,9 @@ function runMigrations(db: Database.Database): void {
     },
     // Migration: Vacay week_start setting (0=Sunday, 1=Monday default)
     () => {
-      try { db.exec("ALTER TABLE vacay_plans ADD COLUMN week_start INTEGER NOT NULL DEFAULT 1"); } catch {}
+      try {
+        db.exec('ALTER TABLE vacay_plans ADD COLUMN week_start INTEGER NOT NULL DEFAULT 1');
+      } catch {}
     },
     // Migration: Unified Photo Provider Abstraction Layer (#584)
     // Central trek_photos registry; trip_photos + journey_photos reference via photo_id
@@ -1531,17 +1912,25 @@ function runMigrations(db: Database.Database): void {
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      db.exec('CREATE UNIQUE INDEX IF NOT EXISTS idx_trek_photos_provider_asset ON trek_photos(provider, asset_id, owner_id) WHERE asset_id IS NOT NULL');
+      db.exec(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_trek_photos_provider_asset ON trek_photos(provider, asset_id, owner_id) WHERE asset_id IS NOT NULL',
+      );
       db.exec('CREATE INDEX IF NOT EXISTS idx_trek_photos_owner ON trek_photos(owner_id)');
 
       // 2. Migrate trip_photos → trek_photos + photo_id FK
-      const tripPhotosExists = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'trip_photos'").get();
+      const tripPhotosExists = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'trip_photos'")
+        .get();
       if (tripPhotosExists) {
         // Detect schema variant: old (immich_asset_id) vs new (asset_id + provider)
         const tpCols = db.prepare("PRAGMA table_info('trip_photos')").all() as Array<{ name: string }>;
-        const tpColNames = new Set(tpCols.map(c => c.name));
+        const tpColNames = new Set(tpCols.map((c) => c.name));
         const hasProvider = tpColNames.has('provider');
-        const assetCol = tpColNames.has('asset_id') ? 'asset_id' : (tpColNames.has('immich_asset_id') ? 'immich_asset_id' : null);
+        const assetCol = tpColNames.has('asset_id')
+          ? 'asset_id'
+          : tpColNames.has('immich_asset_id')
+            ? 'immich_asset_id'
+            : null;
         const hasAlbumLink = tpColNames.has('album_link_id');
 
         if (assetCol) {
@@ -1549,7 +1938,9 @@ function runMigrations(db: Database.Database): void {
           // Qualified alias needed in JOIN context where both trip_photos and trek_photos have provider
           const providerJoinExpr = hasProvider ? 'tp.provider' : "'immich'";
           const sharedExpr = tpColNames.has('shared') ? 'shared' : '1';
-          const addedAtExpr = tpColNames.has('added_at') ? 'COALESCE(added_at, CURRENT_TIMESTAMP)' : 'CURRENT_TIMESTAMP';
+          const addedAtExpr = tpColNames.has('added_at')
+            ? 'COALESCE(added_at, CURRENT_TIMESTAMP)'
+            : 'CURRENT_TIMESTAMP';
           const albumLinkExpr = hasAlbumLink ? 'album_link_id' : 'NULL';
 
           // Insert existing trip photo references into trek_photos
@@ -1601,7 +1992,9 @@ function runMigrations(db: Database.Database): void {
       }
 
       // 3. Migrate journey_photos → trek_photos + photo_id FK
-      const journeyPhotosExists = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'journey_photos'").get();
+      const journeyPhotosExists = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'journey_photos'")
+        .get();
       if (journeyPhotosExists) {
         // Insert provider-based journey photos into trek_photos
         db.exec(`
@@ -1655,7 +2048,9 @@ function runMigrations(db: Database.Database): void {
     },
     // Migration 99: hide_skeletons per-user setting on journey_contributors
     () => {
-      try { db.exec('ALTER TABLE journey_contributors ADD COLUMN hide_skeletons INTEGER NOT NULL DEFAULT 0'); } catch {}
+      try {
+        db.exec('ALTER TABLE journey_contributors ADD COLUMN hide_skeletons INTEGER NOT NULL DEFAULT 0');
+      } catch {}
     },
     // Migration 100: Idempotency keys for offline mutation replay
     () => {
@@ -1681,7 +2076,11 @@ function runMigrations(db: Database.Database): void {
 
     // Migration 102: Add check_in_end column for check-in time ranges
     () => {
-      try { db.exec('ALTER TABLE day_accommodations ADD COLUMN check_in_end TEXT'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE day_accommodations ADD COLUMN check_in_end TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     // Migration 103: System notices — user tracking columns + dismissals table
     () => {
@@ -1699,8 +2098,16 @@ function runMigrations(db: Database.Database): void {
     },
     // Migration 104: Passphrase support for Synology shared-album links (#689)
     () => {
-      try { db.exec('ALTER TABLE trip_album_links ADD COLUMN passphrase TEXT DEFAULT NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
-      try { db.exec('ALTER TABLE trek_photos ADD COLUMN passphrase TEXT DEFAULT NULL'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE trip_album_links ADD COLUMN passphrase TEXT DEFAULT NULL');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      try {
+        db.exec('ALTER TABLE trek_photos ADD COLUMN passphrase TEXT DEFAULT NULL');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     // Migration 105: Persistent Google place photo disk cache registry
     () => {
@@ -1727,8 +2134,9 @@ function runMigrations(db: Database.Database): void {
       `);
     },
     // Migration 107: Backfill expired signed Google photo URLs to stable proxy URLs
-    { raw: () => {
-      db.exec(`
+    {
+      raw: () => {
+        db.exec(`
         UPDATE places
         SET image_url = '/api/maps/place-photo/' || google_place_id || '/bytes',
             updated_at = CURRENT_TIMESTAMP
@@ -1740,9 +2148,11 @@ function runMigrations(db: Database.Database): void {
             OR (image_url LIKE '%places.googleapis.com%' AND image_url LIKE '%/places/%/photos/%')
           )
       `);
-    }},
+      },
+    },
     // Migration 108: Disk cache metadata for remote-provider photo thumbnails (Immich / Synology)
-    () => db.exec(`
+    () =>
+      db.exec(`
       CREATE TABLE IF NOT EXISTS trek_photo_cache_meta (
         cache_key  TEXT    PRIMARY KEY,
         content_type TEXT  NOT NULL DEFAULT 'image/jpeg',
@@ -1768,8 +2178,14 @@ function runMigrations(db: Database.Database): void {
           created_at DATETIME DEFAULT CURRENT_TIMESTAMP
         )
       `);
-      db.exec('CREATE INDEX IF NOT EXISTS idx_reservation_endpoints_reservation_id ON reservation_endpoints(reservation_id)');
-      try { db.exec('ALTER TABLE reservations ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 0'); } catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      db.exec(
+        'CREATE INDEX IF NOT EXISTS idx_reservation_endpoints_reservation_id ON reservation_endpoints(reservation_id)',
+      );
+      try {
+        db.exec('ALTER TABLE reservations ADD COLUMN needs_review INTEGER NOT NULL DEFAULT 0');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     // Migration 110 — link transport reservations to days via day_id / end_day_id
     () => {
@@ -1810,25 +2226,34 @@ function runMigrations(db: Database.Database): void {
     // Default is off — uploading to Immich must be an explicit choice, not a
     // side effect of having a writable API key.
     () => {
-      try { db.exec('ALTER TABLE users ADD COLUMN immich_auto_upload INTEGER NOT NULL DEFAULT 0'); }
-      catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN immich_auto_upload INTEGER NOT NULL DEFAULT 0');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     // Migration 112: expose immich auto-upload toggle in the Settings UI (#730)
     // Runs after Immich provider seeding so the FK to photo_providers holds.
     () => {
       try {
-        const hasTable = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('photo_providers', 'photo_provider_fields')").all() as Array<{ name: string }>;
-        const hasProviders = hasTable.some(t => t.name === 'photo_providers');
-        const hasFields = hasTable.some(t => t.name === 'photo_provider_fields');
+        const hasTable = db
+          .prepare(
+            "SELECT name FROM sqlite_master WHERE type = 'table' AND name IN ('photo_providers', 'photo_provider_fields')",
+          )
+          .all() as Array<{ name: string }>;
+        const hasProviders = hasTable.some((t) => t.name === 'photo_providers');
+        const hasFields = hasTable.some((t) => t.name === 'photo_provider_fields');
         if (hasProviders && hasFields) {
           const immichRow = db.prepare("SELECT 1 FROM photo_providers WHERE id = 'immich' LIMIT 1").get();
           if (immichRow) {
-            db.prepare(`
+            db.prepare(
+              `
               INSERT OR IGNORE INTO photo_provider_fields
                 (provider_id, field_key, label, input_type, placeholder, required, secret, settings_key, payload_key, sort_order)
               VALUES
                 ('immich', 'immich_auto_upload', 'immichAutoUpload', 'checkbox', NULL, 0, 0, 'auto_upload', 'auto_upload', 5)
-            `).run();
+            `,
+            ).run();
           }
         }
       } catch (err: any) {
@@ -1837,15 +2262,21 @@ function runMigrations(db: Database.Database): void {
     },
     // Migration: RFC 8707 resource indicators — audience-bind OAuth tokens to /mcp
     () => {
-      try { db.exec('ALTER TABLE oauth_tokens ADD COLUMN audience TEXT'); }
-      catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE oauth_tokens ADD COLUMN audience TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     // Migration: password reset — add password_version for session
     // invalidation, and a token table keyed by SHA-256 hash (raw tokens
     // never hit the DB).
     () => {
-      try { db.exec('ALTER TABLE users ADD COLUMN password_version INTEGER NOT NULL DEFAULT 0'); }
-      catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN password_version INTEGER NOT NULL DEFAULT 0');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
       db.exec(`
         CREATE TABLE IF NOT EXISTS password_reset_tokens (
           id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1864,8 +2295,11 @@ function runMigrations(db: Database.Database): void {
     // reminder for each todo so we don't spam the same notification
     // every day the scheduler runs.
     () => {
-      try { db.exec('ALTER TABLE todo_items ADD COLUMN reminded_at DATETIME'); }
-      catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE todo_items ADD COLUMN reminded_at DATETIME');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     // Migration: security audit batch 1 — columns + indexes required
     // by several fixes bundled into one PR.
@@ -1877,8 +2311,11 @@ function runMigrations(db: Database.Database): void {
     //   user_id, and notifications/photos/reservations had similar
     //   gaps.
     () => {
-      try { db.exec('ALTER TABLE share_tokens ADD COLUMN expires_at TEXT'); }
-      catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE share_tokens ADD COLUMN expires_at TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
       db.exec(`
         CREATE INDEX IF NOT EXISTS idx_trips_user_id ON trips(user_id);
         CREATE INDEX IF NOT EXISTS idx_trips_created_at ON trips(created_at DESC);
@@ -1893,9 +2330,13 @@ function runMigrations(db: Database.Database): void {
         // build whichever index makes sense for the live columns.
         const cols = db.prepare("PRAGMA table_info('day_accommodations')").all() as Array<{ name: string }>;
         const names = new Set(cols.map((c) => c.name));
-        if (names.has('start_day_id')) db.exec('CREATE INDEX IF NOT EXISTS idx_day_accommodations_start_day_id ON day_accommodations(start_day_id)');
-        if (names.has('end_day_id')) db.exec('CREATE INDEX IF NOT EXISTS idx_day_accommodations_end_day_id ON day_accommodations(end_day_id)');
-      } catch { /* table may not exist on very old installs */ }
+        if (names.has('start_day_id'))
+          db.exec('CREATE INDEX IF NOT EXISTS idx_day_accommodations_start_day_id ON day_accommodations(start_day_id)');
+        if (names.has('end_day_id'))
+          db.exec('CREATE INDEX IF NOT EXISTS idx_day_accommodations_end_day_id ON day_accommodations(end_day_id)');
+      } catch {
+        /* table may not exist on very old installs */
+      }
       try {
         // notifications schema has varied; probe before indexing.
         const cols = db.prepare("PRAGMA table_info('notifications')").all() as Array<{ name: string }>;
@@ -1903,7 +2344,9 @@ function runMigrations(db: Database.Database): void {
         if (names.has('target') && names.has('scope')) {
           db.exec('CREATE INDEX IF NOT EXISTS idx_notifications_target_scope ON notifications(target, scope)');
         }
-      } catch { /* notifications table may not exist on very old installs */ }
+      } catch {
+        /* notifications table may not exist on very old installs */
+      }
     },
     // Migration: widen idempotency_keys primary key to (key, user_id,
     // method, path). The middleware lookup was widened in the same audit
@@ -1915,7 +2358,9 @@ function runMigrations(db: Database.Database): void {
     // table with the widened PK, preserving existing rows (the old PK
     // guarantees no conflicts in the new, strictly looser unique key).
     () => {
-      const hasTable = db.prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'idempotency_keys'").get();
+      const hasTable = db
+        .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'idempotency_keys'")
+        .get();
       if (!hasTable) return;
       db.exec(`
         CREATE TABLE idempotency_keys_new (
@@ -2022,12 +2467,10 @@ function runMigrations(db: Database.Database): void {
     // wrapper entries ('Gallery', '[Trip Photos]') created by the old model
     // are removed — the gallery table replaces them.
     () => {
-      const hasOld = db.prepare(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'journey_photos'"
-      ).get();
-      const hasBackup = db.prepare(
-        "SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'journey_photos_old'"
-      ).get();
+      const hasOld = db.prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'journey_photos'").get();
+      const hasBackup = db
+        .prepare("SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'journey_photos_old'")
+        .get();
       if (hasOld && !hasBackup) {
         db.exec('ALTER TABLE journey_photos RENAME TO journey_photos_old');
       }
@@ -2103,9 +2546,7 @@ function runMigrations(db: Database.Database): void {
 
       // Remove synthetic wrapper entries replaced by the gallery model.
       // ON DELETE CASCADE on journey_entry_photos cleans up junction rows.
-      db.prepare(
-        "DELETE FROM journey_entries WHERE title IN ('Gallery', '[Trip Photos]')"
-      ).run();
+      db.prepare("DELETE FROM journey_entries WHERE title IN ('Gallery', '[Trip Photos]')").run();
 
       db.exec('CREATE INDEX IF NOT EXISTS idx_journey_photos_journey       ON journey_photos(journey_id)');
       db.exec('CREATE INDEX IF NOT EXISTS idx_journey_entry_photos_entry   ON journey_entry_photos(entry_id)');
@@ -2195,7 +2636,7 @@ function runMigrations(db: Database.Database): void {
       `);
       db.exec(
         'CREATE INDEX IF NOT EXISTS idx_journey_entries_order ' +
-        'ON journey_entries(journey_id, entry_date, sort_order)'
+          'ON journey_entries(journey_id, entry_date, sort_order)',
       );
     },
     // Swap inverted start_day_id/end_day_id pairs in day_accommodations caused
@@ -2211,7 +2652,9 @@ function runMigrations(db: Database.Database): void {
     },
     // prepare migration to nest + typeorm
     () => {
-      db.exec(`CREATE TABLE IF NOT EXISTS migrations (id integer PRIMARY KEY AUTOINCREMENT NOT NULL, timestamp bigint NOT NULL, name varchar NOT NULL);`);
+      db.exec(
+        `CREATE TABLE IF NOT EXISTS migrations (id integer PRIMARY KEY AUTOINCREMENT NOT NULL, timestamp bigint NOT NULL, name varchar NOT NULL);`,
+      );
       db.exec(`INSERT INTO migrations (timestamp, name) VALUES (1777810195344, 'InitialSchema1777810195344');`);
       db.exec(`INSERT INTO app_settings (key, value) VALUES ('app_version', '${process.env.APP_VERSION || '3.0.14'}')`);
     },
@@ -2219,14 +2662,18 @@ function runMigrations(db: Database.Database): void {
     () => {
       const hadCollision = trimUserWhitespace(db);
       if (hadCollision) {
-        db.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')").run();
+        db.prepare(
+          "INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')",
+        ).run();
       }
     },
     () => {
-      db.exec(`CREATE TABLE IF NOT EXISTS schema_version_new (id INTEGER PRIMARY KEY AUTOINCREMENT,version INTEGER NOT NULL)`)
-      db.exec(`INSERT INTO schema_version_new (version) SELECT version FROM schema_version`)
-      db.exec(`DROP TABLE schema_version`)
-      db.exec(`ALTER TABLE schema_version_new RENAME TO schema_version`)
+      db.exec(
+        `CREATE TABLE IF NOT EXISTS schema_version_new (id INTEGER PRIMARY KEY AUTOINCREMENT,version INTEGER NOT NULL)`,
+      );
+      db.exec(`INSERT INTO schema_version_new (version) SELECT version FROM schema_version`);
+      db.exec(`DROP TABLE schema_version`);
+      db.exec(`ALTER TABLE schema_version_new RENAME TO schema_version`);
       db.exec(`UPDATE app_settings SET value = '${process.env.APP_VERSION || '3.0.15'}' WHERE key = 'app_version'`);
     },
     // Migration: OAuth 2.0 client_credentials grant — allow user-owned confidential
@@ -2234,8 +2681,11 @@ function runMigrations(db: Database.Database): void {
     // via client_id + client_secret. Flag is immutable after creation so existing
     // authorization-code clients are not silently upgraded.
     () => {
-      try { db.exec('ALTER TABLE oauth_clients ADD COLUMN allows_client_credentials INTEGER NOT NULL DEFAULT 0'); }
-      catch (err: any) { if (!err.message?.includes('duplicate column name')) throw err; }
+      try {
+        db.exec('ALTER TABLE oauth_clients ADD COLUMN allows_client_credentials INTEGER NOT NULL DEFAULT 0');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
     },
     // Drop stale atlas cache rows for territories that used to resolve to their
     // surrounding country (Hong Kong/Macau as China, San Marino/Vatican as Italy,
@@ -2244,19 +2694,19 @@ function runMigrations(db: Database.Database): void {
     () => {
       const enclaveBoxes: [number, number, number, number][] = [
         [113.83, 22.15, 114.43, 22.56], // HK
-        [113.53, 22.10, 113.60, 22.21], // MO
-        [12.40, 43.89, 12.52, 43.99],   // SM
-        [12.44, 41.90, 12.46, 41.91],   // VA
-        [7.40, 43.72, 7.44, 43.75],     // MC
-        [9.47, 47.05, 9.64, 47.27],     // LI
-        [-5.36, 36.11, -5.33, 36.16],   // GI
-        [-67.30, 17.88, -65.22, 18.53], // PR
+        [113.53, 22.1, 113.6, 22.21], // MO
+        [12.4, 43.89, 12.52, 43.99], // SM
+        [12.44, 41.9, 12.46, 41.91], // VA
+        [7.4, 43.72, 7.44, 43.75], // MC
+        [9.47, 47.05, 9.64, 47.27], // LI
+        [-5.36, 36.11, -5.33, 36.16], // GI
+        [-67.3, 17.88, -65.22, 18.53], // PR
       ];
       try {
         const del = db.prepare(
           `DELETE FROM place_regions WHERE place_id IN (
              SELECT id FROM places WHERE lat BETWEEN ? AND ? AND lng BETWEEN ? AND ?
-           )`
+           )`,
         );
         for (const [minLng, minLat, maxLng, maxLat] of enclaveBoxes) {
           del.run(minLat, maxLat, minLng, maxLng);

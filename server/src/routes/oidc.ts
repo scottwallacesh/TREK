@@ -1,5 +1,6 @@
-import express, { Request, Response } from 'express';
+import { resolveAuthToggles } from '../services/authService';
 import { setAuthCookie } from '../services/cookie';
+import { getAppUrl } from '../services/notifications';
 import {
   getOidcConfig,
   discover,
@@ -15,8 +16,8 @@ import {
   generateToken,
   frontendUrl,
 } from '../services/oidcService';
-import { getAppUrl } from '../services/notifications';
-import { resolveAuthToggles } from '../services/authService';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 

@@ -1,6 +1,5 @@
-import express, { Request, Response } from 'express';
+import { db } from '../db/database';
 import { authenticate } from '../middleware/auth';
-import { AuthRequest } from '../types';
 import {
   searchPlaces,
   getPlaceDetails,
@@ -10,8 +9,10 @@ import {
   resolveGoogleMapsUrl,
   autocompletePlaces,
 } from '../services/mapsService';
-import { db } from '../db/database';
 import { serveFilePath } from '../services/placePhotoCache';
+import { AuthRequest } from '../types';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 
@@ -35,7 +36,9 @@ router.post('/search', authenticate, async (req: Request, res: Response) => {
 
 // POST /autocomplete
 router.post('/autocomplete', authenticate, async (req: Request, res: Response) => {
-  const autocompleteEnabledRow = db.prepare("SELECT value FROM app_settings WHERE key = 'places_autocomplete_enabled'").get() as { value: string } | undefined;
+  const autocompleteEnabledRow = db
+    .prepare("SELECT value FROM app_settings WHERE key = 'places_autocomplete_enabled'")
+    .get() as { value: string } | undefined;
   if (autocompleteEnabledRow?.value === 'false') return res.status(200).json({ suggestions: [], source: 'disabled' });
 
   const authReq = req as AuthRequest;
@@ -51,9 +54,14 @@ router.post('/autocomplete', authenticate, async (req: Request, res: Response) =
 
   if (locationBias) {
     const { low, high } = locationBias;
-    if (!low || !high
-      || !Number.isFinite(low.lat) || !Number.isFinite(low.lng)
-      || !Number.isFinite(high.lat) || !Number.isFinite(high.lng)) {
+    if (
+      !low ||
+      !high ||
+      !Number.isFinite(low.lat) ||
+      !Number.isFinite(low.lng) ||
+      !Number.isFinite(high.lat) ||
+      !Number.isFinite(high.lng)
+    ) {
       return res.status(400).json({ error: 'Invalid locationBias: low and high must have finite lat and lng' });
     }
   }
@@ -76,7 +84,9 @@ router.post('/autocomplete', authenticate, async (req: Request, res: Response) =
 
 // GET /details/:placeId
 router.get('/details/:placeId', authenticate, async (req: Request, res: Response) => {
-  const detailsEnabledRow = db.prepare("SELECT value FROM app_settings WHERE key = 'places_details_enabled'").get() as { value: string } | undefined;
+  const detailsEnabledRow = db.prepare("SELECT value FROM app_settings WHERE key = 'places_details_enabled'").get() as
+    | { value: string }
+    | undefined;
   if (detailsEnabledRow?.value === 'false') return res.status(200).json({ place: null, disabled: true });
 
   const authReq = req as AuthRequest;
@@ -104,7 +114,9 @@ router.get('/place-photo/:placeId', authenticate, async (req: Request, res: Resp
 
   // Kill-switch only applies to Google Places API fetches — Wikimedia (coords: prefix) is always allowed
   if (!placeId.startsWith('coords:')) {
-    const photosEnabledRow = db.prepare("SELECT value FROM app_settings WHERE key = 'places_photos_enabled'").get() as { value: string } | undefined;
+    const photosEnabledRow = db.prepare("SELECT value FROM app_settings WHERE key = 'places_photos_enabled'").get() as
+      | { value: string }
+      | undefined;
     if (photosEnabledRow?.value === 'false') return res.status(200).json({ photoUrl: null });
   }
   const lat = parseFloat(req.query.lat as string);

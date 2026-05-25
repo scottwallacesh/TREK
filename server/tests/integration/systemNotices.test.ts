@@ -2,9 +2,18 @@
  * System Notices API integration tests.
  * Covers GET /api/system-notices/active and POST /api/system-notices/:id/dismiss.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
-import request from 'supertest';
+import { createApp } from '../../src/app';
+import { runMigrations } from '../../src/db/migrations';
+import { createTables } from '../../src/db/schema';
+import { SYSTEM_NOTICES } from '../../src/systemNotices/registry';
+import type { SystemNotice } from '../../src/systemNotices/types';
+import { authCookie } from '../helpers/auth';
+import { createUser, createAdmin } from '../helpers/factories';
+import { resetTestDb } from '../helpers/test-db';
+
 import type { Application } from 'express';
+import request from 'supertest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll, afterEach } from 'vitest';
 
 // ─────────────────────────────────────────────────────────────────────────────
 // Bare in-memory DB — schema applied in beforeAll after mocks register
@@ -34,15 +43,6 @@ vi.mock('../../src/config', () => ({
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
   updateJwtSecret: () => {},
 }));
-
-import { createApp } from '../../src/app';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { resetTestDb } from '../helpers/test-db';
-import { createUser, createAdmin } from '../helpers/factories';
-import { authCookie } from '../helpers/auth';
-import { SYSTEM_NOTICES } from '../../src/systemNotices/registry';
-import type { SystemNotice } from '../../src/systemNotices/types';
 
 const app: Application = createApp();
 
@@ -87,9 +87,7 @@ describe('GET /api/system-notices/active', () => {
     // login_count > 1 means firstLogin condition does not match for any notice;
     // first_seen_version >= 3.0.0 means existingUserBeforeVersion('3.0.0') also does not match
     testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.0', user.id);
-    const res = await request(app)
-      .get('/api/system-notices/active')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body).toEqual([]);
   });
@@ -101,9 +99,7 @@ describe('GET /api/system-notices/active', () => {
       // Set login_count to 1 (first login)
       testDb.prepare('UPDATE users SET login_count = 1 WHERE id = ?').run(user.id);
 
-      const res = await request(app)
-        .get('/api/system-notices/active')
-        .set('Cookie', authCookie(user.id));
+      const res = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
       expect(res.status).toBe(200);
       // welcome-v1 is also in the registry and matches firstLogin, so at least TEST_NOTICE is present
       const testNotice = res.body.find((n: { id: string }) => n.id === TEST_NOTICE.id);
@@ -125,9 +121,7 @@ describe('GET /api/system-notices/active', () => {
       const { user } = createUser(testDb);
       testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.0', user.id);
 
-      const res = await request(app)
-        .get('/api/system-notices/active')
-        .set('Cookie', authCookie(user.id));
+      const res = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
       expect(res.status).toBe(200);
       expect(res.body).toEqual([]);
     } finally {
@@ -143,13 +137,11 @@ describe('GET /api/system-notices/active', () => {
       testDb.prepare('UPDATE users SET login_count = 1 WHERE id = ?').run(user.id);
 
       // Dismiss the notice directly in DB
-      testDb.prepare(
-        'INSERT INTO user_notice_dismissals (user_id, notice_id, dismissed_at) VALUES (?, ?, ?)'
-      ).run(user.id, TEST_NOTICE.id, Date.now());
+      testDb
+        .prepare('INSERT INTO user_notice_dismissals (user_id, notice_id, dismissed_at) VALUES (?, ?, ?)')
+        .run(user.id, TEST_NOTICE.id, Date.now());
 
-      const res = await request(app)
-        .get('/api/system-notices/active')
-        .set('Cookie', authCookie(user.id));
+      const res = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
       expect(res.status).toBe(200);
       // TEST_NOTICE should be filtered out; welcome-v1 may still appear
       const found = res.body.find((n: { id: string }) => n.id === TEST_NOTICE.id);
@@ -220,20 +212,14 @@ describe('POST /api/system-notices/:id/dismiss', () => {
       testDb.prepare('UPDATE users SET login_count = 1 WHERE id = ?').run(user.id);
 
       // Confirm TEST_NOTICE is visible before dismiss
-      const before = await request(app)
-        .get('/api/system-notices/active')
-        .set('Cookie', authCookie(user.id));
+      const before = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
       expect(before.body.find((n: { id: string }) => n.id === TEST_NOTICE.id)).toBeDefined();
 
       // Dismiss it
-      await request(app)
-        .post(`/api/system-notices/${TEST_NOTICE.id}/dismiss`)
-        .set('Cookie', authCookie(user.id));
+      await request(app).post(`/api/system-notices/${TEST_NOTICE.id}/dismiss`).set('Cookie', authCookie(user.id));
 
       // Confirm TEST_NOTICE is gone; other notices (e.g. welcome-v1) may still appear
-      const after = await request(app)
-        .get('/api/system-notices/active')
-        .set('Cookie', authCookie(user.id));
+      const after = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
       expect(after.status).toBe(200);
       expect(after.body.find((n: { id: string }) => n.id === TEST_NOTICE.id)).toBeUndefined();
     } finally {
@@ -276,11 +262,11 @@ describe('v3014-whitespace-collision notice', () => {
 
   it('SN-COLLISION-1 — shown to admin when collision flag is set and user predates 3.0.14', async () => {
     const user = setupCollisionAdmin();
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')").run();
+    testDb
+      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')")
+      .run();
 
-    const res = await request(app)
-      .get('/api/system-notices/active')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.find((n: { id: string }) => n.id === NOTICE_ID)).toBeDefined();
@@ -289,9 +275,7 @@ describe('v3014-whitespace-collision notice', () => {
   it('SN-COLLISION-2 — hidden when collision flag is absent', async () => {
     const user = setupCollisionAdmin();
 
-    const res = await request(app)
-      .get('/api/system-notices/active')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.find((n: { id: string }) => n.id === NOTICE_ID)).toBeUndefined();
@@ -299,11 +283,11 @@ describe('v3014-whitespace-collision notice', () => {
 
   it('SN-COLLISION-3 — hidden when collision flag is explicitly false', async () => {
     const user = setupCollisionAdmin();
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'false')").run();
+    testDb
+      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'false')")
+      .run();
 
-    const res = await request(app)
-      .get('/api/system-notices/active')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.find((n: { id: string }) => n.id === NOTICE_ID)).toBeUndefined();
@@ -312,11 +296,11 @@ describe('v3014-whitespace-collision notice', () => {
   it('SN-COLLISION-4 — hidden for non-admin user even when collision flag is set', async () => {
     const { user } = createUser(testDb);
     testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.0', user.id);
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')").run();
+    testDb
+      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')")
+      .run();
 
-    const res = await request(app)
-      .get('/api/system-notices/active')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.find((n: { id: string }) => n.id === NOTICE_ID)).toBeUndefined();
@@ -325,11 +309,11 @@ describe('v3014-whitespace-collision notice', () => {
   it('SN-COLLISION-5 — hidden for user whose first_seen_version is >= 3.0.14 (new account)', async () => {
     const { user } = createAdmin(testDb);
     testDb.prepare('UPDATE users SET login_count = 5, first_seen_version = ? WHERE id = ?').run('3.0.14', user.id);
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')").run();
+    testDb
+      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')")
+      .run();
 
-    const res = await request(app)
-      .get('/api/system-notices/active')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.find((n: { id: string }) => n.id === NOTICE_ID)).toBeUndefined();
@@ -338,11 +322,11 @@ describe('v3014-whitespace-collision notice', () => {
   it('SN-COLLISION-6 — hidden when app version is below 3.0.14', async () => {
     process.env.APP_VERSION = '3.0.13';
     const user = setupCollisionAdmin();
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')").run();
+    testDb
+      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')")
+      .run();
 
-    const res = await request(app)
-      .get('/api/system-notices/active')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.find((n: { id: string }) => n.id === NOTICE_ID)).toBeUndefined();
@@ -350,11 +334,11 @@ describe('v3014-whitespace-collision notice', () => {
 
   it('SN-COLLISION-7 — hidden after admin dismisses it', async () => {
     const user = setupCollisionAdmin();
-    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')").run();
+    testDb
+      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('whitespace_migration_collision', 'true')")
+      .run();
 
-    const before = await request(app)
-      .get('/api/system-notices/active')
-      .set('Cookie', authCookie(user.id));
+    const before = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
     expect(before.body.find((n: { id: string }) => n.id === NOTICE_ID)).toBeDefined();
 
     const dismiss = await request(app)
@@ -362,9 +346,7 @@ describe('v3014-whitespace-collision notice', () => {
       .set('Cookie', authCookie(user.id));
     expect(dismiss.status).toBe(204);
 
-    const after = await request(app)
-      .get('/api/system-notices/active')
-      .set('Cookie', authCookie(user.id));
+    const after = await request(app).get('/api/system-notices/active').set('Cookie', authCookie(user.id));
     expect(after.body.find((n: { id: string }) => n.id === NOTICE_ID)).toBeUndefined();
   });
 });

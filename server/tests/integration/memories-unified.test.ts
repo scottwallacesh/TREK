@@ -6,9 +6,17 @@
  * No real HTTP is made — safeFetch is mocked to never be called.
  * The broadcast WebSocket call is no-op mocked.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
-import request from 'supertest';
+import { createApp } from '../../src/app';
+import { runMigrations } from '../../src/db/migrations';
+import { createTables } from '../../src/db/schema';
+import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
+import { authCookie } from '../helpers/auth';
+import { createUser, createTrip, addTripMember, addTripPhoto, addAlbumLink } from '../helpers/factories';
+import { resetTestDb } from '../helpers/test-db';
+
 import type { Application } from 'express';
+import request from 'supertest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
 // ── Hoisted DB mock ──────────────────────────────────────────────────────────
 
@@ -24,7 +32,11 @@ const { testDb, dbMock } = vi.hoisted(() => {
     reinitialize: () => {},
     getPlaceWithTags: () => null,
     canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
+      db
+        .prepare(
+          `SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`,
+        )
+        .get(userId, tripId, userId),
     isOwner: (tripId: any, userId: number) =>
       !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
@@ -47,14 +59,6 @@ vi.mock('../../src/utils/ssrfGuard', async () => {
   };
 });
 
-import { createApp } from '../../src/app';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { resetTestDb } from '../helpers/test-db';
-import { createUser, createTrip, addTripMember, addTripPhoto, addAlbumLink } from '../helpers/factories';
-import { authCookie } from '../helpers/auth';
-import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
-
 const app: Application = createApp();
 
 const BASE = '/api/integrations/memories/unified';
@@ -74,7 +78,9 @@ afterAll(() => testDb.close());
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
 
-function photosUrl(tripId: number) { return `${BASE}/trips/${tripId}/photos`; }
+function photosUrl(tripId: number) {
+  return `${BASE}/trips/${tripId}/photos`;
+}
 function albumLinksUrl(tripId: number, linkId?: number) {
   return linkId ? `${BASE}/trips/${tripId}/album-links/${linkId}` : `${BASE}/trips/${tripId}/album-links`;
 }
@@ -92,9 +98,7 @@ describe('Unified photo management', () => {
     addTripPhoto(testDb, trip.id, owner.id, 'asset-own', 'immich', { shared: false });
     addTripPhoto(testDb, trip.id, member.id, 'asset-shared', 'immich', { shared: true });
 
-    const res = await request(app)
-      .get(photosUrl(trip.id))
-      .set('Cookie', authCookie(owner.id));
+    const res = await request(app).get(photosUrl(trip.id)).set('Cookie', authCookie(owner.id));
 
     expect(res.status).toBe(200);
     const ids = (res.body.photos as any[]).map((p: any) => p.asset_id);
@@ -102,7 +106,7 @@ describe('Unified photo management', () => {
     expect(ids).toContain('asset-shared');
   });
 
-  it('UNIFIED-002 — GET photos excludes other members\' private photos', async () => {
+  it("UNIFIED-002 — GET photos excludes other members' private photos", async () => {
     const { user: owner } = createUser(testDb);
     const { user: member } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
@@ -110,9 +114,7 @@ describe('Unified photo management', () => {
 
     addTripPhoto(testDb, trip.id, member.id, 'asset-private', 'immich', { shared: false });
 
-    const res = await request(app)
-      .get(photosUrl(trip.id))
-      .set('Cookie', authCookie(owner.id));
+    const res = await request(app).get(photosUrl(trip.id)).set('Cookie', authCookie(owner.id));
 
     expect(res.status).toBe(200);
     const ids = (res.body.photos as any[]).map((p: any) => p.asset_id);
@@ -124,9 +126,7 @@ describe('Unified photo management', () => {
     const { user: stranger } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
 
-    const res = await request(app)
-      .get(photosUrl(trip.id))
-      .set('Cookie', authCookie(stranger.id));
+    const res = await request(app).get(photosUrl(trip.id)).set('Cookie', authCookie(stranger.id));
 
     expect(res.status).toBe(404);
   });
@@ -146,11 +146,15 @@ describe('Unified photo management', () => {
     expect(res.status).toBe(200);
     expect(res.body.added).toBe(2);
 
-    const rows = testDb.prepare(`
+    const rows = testDb
+      .prepare(
+        `
       SELECT tkp.asset_id FROM trip_photos tp
       JOIN trek_photos tkp ON tkp.id = tp.photo_id
       WHERE tp.trip_id = ?
-    `).all(trip.id) as any[];
+    `,
+      )
+      .all(trip.id) as any[];
     expect(rows.map((r: any) => r.asset_id)).toEqual(expect.arrayContaining(['asset-a', 'asset-b']));
   });
 
@@ -158,10 +162,7 @@ describe('Unified photo management', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    const res = await request(app)
-      .post(photosUrl(trip.id))
-      .set('Cookie', authCookie(user.id))
-      .send({ selections: [] });
+    const res = await request(app).post(photosUrl(trip.id)).set('Cookie', authCookie(user.id)).send({ selections: [] });
 
     expect(res.status).toBe(400);
   });
@@ -182,11 +183,15 @@ describe('Unified photo management', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     addTripPhoto(testDb, trip.id, user.id, 'asset-tog', 'immich', { shared: false });
-    const trekRef = testDb.prepare(`
+    const trekRef = testDb
+      .prepare(
+        `
       SELECT tp.photo_id FROM trip_photos tp
       JOIN trek_photos tkp ON tkp.id = tp.photo_id
       WHERE tp.trip_id = ? AND tkp.asset_id = ?
-    `).get(trip.id, 'asset-tog') as any;
+    `,
+      )
+      .get(trip.id, 'asset-tog') as any;
 
     const res = await request(app)
       .put(`${photosUrl(trip.id)}/sharing`)
@@ -194,11 +199,15 @@ describe('Unified photo management', () => {
       .send({ photo_id: trekRef.photo_id, shared: true });
 
     expect(res.status).toBe(200);
-    const row = testDb.prepare(`
+    const row = testDb
+      .prepare(
+        `
       SELECT tp.shared FROM trip_photos tp
       JOIN trek_photos tkp ON tkp.id = tp.photo_id
       WHERE tkp.asset_id = ?
-    `).get('asset-tog') as any;
+    `,
+      )
+      .get('asset-tog') as any;
     expect(row.shared).toBe(1);
   });
 
@@ -219,11 +228,15 @@ describe('Unified photo management', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
     addTripPhoto(testDb, trip.id, user.id, 'asset-del', 'immich');
-    const trekRef = testDb.prepare(`
+    const trekRef = testDb
+      .prepare(
+        `
       SELECT tp.photo_id FROM trip_photos tp
       JOIN trek_photos tkp ON tkp.id = tp.photo_id
       WHERE tp.trip_id = ? AND tkp.asset_id = ?
-    `).get(trip.id, 'asset-del') as any;
+    `,
+      )
+      .get(trip.id, 'asset-del') as any;
 
     const res = await request(app)
       .delete(photosUrl(trip.id))
@@ -231,11 +244,15 @@ describe('Unified photo management', () => {
       .send({ photo_id: trekRef.photo_id });
 
     expect(res.status).toBe(200);
-    const row = testDb.prepare(`
+    const row = testDb
+      .prepare(
+        `
       SELECT tp.* FROM trip_photos tp
       JOIN trek_photos tkp ON tkp.id = tp.photo_id
       WHERE tkp.asset_id = ?
-    `).get('asset-del');
+    `,
+      )
+      .get('asset-del');
     expect(row).toBeUndefined();
   });
 
@@ -305,9 +322,7 @@ describe('Unified album-link management', () => {
     // Disable the immich provider
     testDb.prepare('UPDATE photo_providers SET enabled = 0 WHERE id = ?').run('immich');
 
-    const res = await request(app)
-      .get(albumLinksUrl(trip.id))
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(albumLinksUrl(trip.id)).set('Cookie', authCookie(user.id));
 
     // Re-enable for future tests
     testDb.prepare('UPDATE photo_providers SET enabled = 1 WHERE id = ?').run('immich');

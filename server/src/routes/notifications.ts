@@ -1,7 +1,4 @@
-import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
-import { AuthRequest } from '../types';
-import { testSmtp, testWebhook, testNtfy, getAdminWebhookUrl, getUserWebhookUrl, getUserNtfyConfig, getAdminNtfyConfig } from '../services/notifications';
 import {
   getNotifications,
   getUnreadCount,
@@ -13,6 +10,18 @@ import {
   respondToBoolean,
 } from '../services/inAppNotifications';
 import { getPreferencesMatrix, setPreferences } from '../services/notificationPreferencesService';
+import {
+  testSmtp,
+  testWebhook,
+  testNtfy,
+  getAdminWebhookUrl,
+  getUserWebhookUrl,
+  getUserNtfyConfig,
+  getAdminNtfyConfig,
+} from '../services/notifications';
+import { AuthRequest } from '../types';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 
@@ -43,7 +52,11 @@ router.post('/test-webhook', authenticate, async (req: Request, res: Response) =
     if (!url) return res.status(400).json({ error: 'No webhook URL configured' });
   }
   if (typeof url !== 'string') return res.status(400).json({ error: 'url must be a string' });
-  try { new URL(url); } catch { return res.status(400).json({ error: 'Invalid URL' }); }
+  try {
+    new URL(url);
+  } catch {
+    return res.status(400).json({ error: 'Invalid URL' });
+  }
   res.json(await testWebhook(url));
 });
 
@@ -58,9 +71,7 @@ router.post('/test-ntfy', authenticate, async (req: Request, res: Response) => {
   const resolvedTopic = topic || userCfg?.topic || undefined;
   const resolvedServer = server || userCfg?.server || adminCfg.server || undefined;
   // Reuse saved token when request sends null, empty, or the masked placeholder
-  const resolvedToken = (token && token !== '••••••••')
-    ? token
-    : (userCfg?.token ?? adminCfg.token ?? null);
+  const resolvedToken = token && token !== '••••••••' ? token : (userCfg?.token ?? adminCfg.token ?? null);
 
   if (!resolvedTopic) return res.status(400).json({ error: 'No ntfy topic configured' });
 

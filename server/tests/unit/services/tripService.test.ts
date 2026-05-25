@@ -2,6 +2,20 @@
  * Unit tests for tripService — exportICS function (TRIP-SVC-001 through TRIP-SVC-009).
  * Uses a real in-memory SQLite DB so SQL logic is exercised faithfully.
  */
+import { runMigrations } from '../../../src/db/migrations';
+import { createTables } from '../../../src/db/schema';
+import { exportICS, generateDays } from '../../../src/services/tripService';
+import {
+  createUser,
+  createTrip,
+  createReservation,
+  createPlace,
+  createDay,
+  createDayAssignment,
+  createDayNote,
+} from '../../helpers/factories';
+import { resetTestDb } from '../../helpers/test-db';
+
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
 // ── DB setup ──────────────────────────────────────────────────────────────────
@@ -30,12 +44,6 @@ vi.mock('../../../src/config', () => ({
   updateJwtSecret: () => {},
 }));
 
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
-import { resetTestDb } from '../../helpers/test-db';
-import { createUser, createTrip, createReservation, createPlace, createDay, createDayAssignment, createDayNote } from '../../helpers/factories';
-import { exportICS, generateDays } from '../../../src/services/tripService';
-
 beforeAll(() => {
   createTables(testDb);
   runMigrations(testDb);
@@ -53,12 +61,18 @@ afterAll(() => {
 
 function getDays(tripId: number) {
   return testDb.prepare('SELECT * FROM days WHERE trip_id = ? ORDER BY day_number').all(tripId) as {
-    id: number; trip_id: number; day_number: number; date: string | null;
+    id: number;
+    trip_id: number;
+    day_number: number;
+    date: string | null;
   }[];
 }
 
 function getAssignments(dayId: number) {
-  return testDb.prepare('SELECT * FROM day_assignments WHERE day_id = ?').all(dayId) as { id: number; day_id: number }[];
+  return testDb.prepare('SELECT * FROM day_assignments WHERE day_id = ?').all(dayId) as {
+    id: number;
+    day_id: number;
+  }[];
 }
 
 function getNotes(dayId: number) {
@@ -83,8 +97,12 @@ describe('generateDays', () => {
 
     const daysAfter = getDays(trip.id);
     expect(daysAfter).toHaveLength(5);
-    expect(daysAfter.map(d => d.date)).toEqual([
-      '2025-06-10', '2025-06-11', '2025-06-12', '2025-06-13', '2025-06-14',
+    expect(daysAfter.map((d) => d.date)).toEqual([
+      '2025-06-10',
+      '2025-06-11',
+      '2025-06-12',
+      '2025-06-13',
+      '2025-06-14',
     ]);
 
     // day_number 1 (formerly June 1) now has date June 10 — assignment still attached
@@ -111,7 +129,7 @@ describe('generateDays', () => {
 
     const daysAfter = getDays(trip.id);
     expect(daysAfter).toHaveLength(3);
-    expect(daysAfter.map(d => d.date)).toEqual(['2025-07-01', '2025-07-02', '2025-07-03']);
+    expect(daysAfter.map((d) => d.date)).toEqual(['2025-07-01', '2025-07-02', '2025-07-03']);
   });
 
   it('TRIP-SVC-016: shrinking range deletes empty overflow days (issue #909)', () => {
@@ -124,8 +142,12 @@ describe('generateDays', () => {
 
     const daysAfter = getDays(trip.id);
     expect(daysAfter).toHaveLength(5);
-    expect(daysAfter.map(d => d.date)).toEqual([
-      '2025-07-01', '2025-07-02', '2025-07-03', '2025-07-04', '2025-07-05',
+    expect(daysAfter.map((d) => d.date)).toEqual([
+      '2025-07-01',
+      '2025-07-02',
+      '2025-07-03',
+      '2025-07-04',
+      '2025-07-05',
     ]);
   });
 
@@ -143,8 +165,12 @@ describe('generateDays', () => {
 
     const daysAfter = getDays(trip.id);
     expect(daysAfter).toHaveLength(5);
-    expect(daysAfter.map(d => d.date)).toEqual([
-      '2025-08-01', '2025-08-02', '2025-08-03', '2025-08-04', '2025-08-05',
+    expect(daysAfter.map((d) => d.date)).toEqual([
+      '2025-08-01',
+      '2025-08-02',
+      '2025-08-03',
+      '2025-08-04',
+      '2025-08-05',
     ]);
 
     // Existing day 1 retains its assignment
@@ -170,10 +196,10 @@ describe('generateDays', () => {
 
     const daysAfter = getDays(trip.id);
     expect(daysAfter).toHaveLength(4);
-    expect(daysAfter.every(d => d.date === null)).toBe(true);
+    expect(daysAfter.every((d) => d.date === null)).toBe(true);
 
     // The assignment on the former day 2 still exists
-    const formerDay2 = daysAfter.find(d => d.id === daysBefore[1].id);
+    const formerDay2 = daysAfter.find((d) => d.id === daysBefore[1].id);
     expect(formerDay2).toBeDefined();
     expect(getAssignments(formerDay2!.id)).toHaveLength(1);
     expect(getAssignments(formerDay2!.id)[0].id).toBe(assignment.id);
@@ -193,8 +219,12 @@ describe('generateDays', () => {
 
     const daysAfter = getDays(trip.id);
     expect(daysAfter).toHaveLength(5);
-    expect(daysAfter.map(d => d.date)).toEqual([
-      '2025-10-03', '2025-10-04', '2025-10-05', '2025-10-06', '2025-10-07',
+    expect(daysAfter.map((d) => d.date)).toEqual([
+      '2025-10-03',
+      '2025-10-04',
+      '2025-10-05',
+      '2025-10-06',
+      '2025-10-07',
     ]);
 
     // All 5 assignments survive
@@ -229,8 +259,8 @@ describe('generateDays', () => {
     const daysAfter = getDays(trip.id);
     expect(daysAfter).toHaveLength(5);
 
-    const dated = daysAfter.filter(d => d.date !== null);
-    const dateless = daysAfter.filter(d => d.date === null);
+    const dated = daysAfter.filter((d) => d.date !== null);
+    const dateless = daysAfter.filter((d) => d.date === null);
     expect(dated).toHaveLength(4);
     expect(dateless).toHaveLength(1);
 
@@ -239,7 +269,7 @@ describe('generateDays', () => {
     expect(getAssignments(dateless[0].id)[0].id).toBe(assignment.id);
 
     // All day_numbers are unique 1..5
-    const nums = daysAfter.map(d => d.day_number).sort((a, b) => a - b);
+    const nums = daysAfter.map((d) => d.day_number).sort((a, b) => a - b);
     expect(nums).toEqual([1, 2, 3, 4, 5]);
   });
 });
@@ -280,9 +310,7 @@ describe('exportICS', () => {
       title: 'Morning Flight',
       type: 'flight',
     });
-    testDb
-      .prepare('UPDATE reservations SET reservation_time=? WHERE id=?')
-      .run('2025-06-02T09:00', reservation.id);
+    testDb.prepare('UPDATE reservations SET reservation_time=? WHERE id=?').run('2025-06-02T09:00', reservation.id);
 
     const { ics } = exportICS(trip.id);
 
@@ -297,9 +325,7 @@ describe('exportICS', () => {
       title: 'Hotel Check-in',
       type: 'hotel',
     });
-    testDb
-      .prepare('UPDATE reservations SET reservation_time=? WHERE id=?')
-      .run('2025-06-02', reservation.id);
+    testDb.prepare('UPDATE reservations SET reservation_time=? WHERE id=?').run('2025-06-02', reservation.id);
 
     const { ics } = exportICS(trip.id);
 
@@ -313,18 +339,16 @@ describe('exportICS', () => {
       title: 'CDG to JFK',
       type: 'flight',
     });
-    testDb
-      .prepare('UPDATE reservations SET reservation_time=?, metadata=? WHERE id=?')
-      .run(
-        '2025-06-02T09:00',
-        JSON.stringify({
-          airline: 'Air Test',
-          flight_number: 'AT100',
-          departure_airport: 'CDG',
-          arrival_airport: 'JFK',
-        }),
-        reservation.id
-      );
+    testDb.prepare('UPDATE reservations SET reservation_time=?, metadata=? WHERE id=?').run(
+      '2025-06-02T09:00',
+      JSON.stringify({
+        airline: 'Air Test',
+        flight_number: 'AT100',
+        departure_airport: 'CDG',
+        arrival_airport: 'JFK',
+      }),
+      reservation.id,
+    );
 
     const { ics } = exportICS(trip.id);
 

@@ -1,13 +1,13 @@
 // FE-COMP-PACKING-001 to FE-COMP-PACKING-020
-import { vi } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '../../../tests/helpers/render';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { vi } from 'vitest';
+import { buildPackingItem, buildTrip, buildUser } from '../../../tests/helpers/factories';
 import { server } from '../../../tests/helpers/msw/server';
+import { fireEvent, render, screen, waitFor } from '../../../tests/helpers/render';
+import { resetAllStores, seedStore } from '../../../tests/helpers/store';
 import { useAuthStore } from '../../store/authStore';
 import { useTripStore } from '../../store/tripStore';
-import { resetAllStores, seedStore } from '../../../tests/helpers/store';
-import { buildUser, buildTrip, buildPackingItem } from '../../../tests/helpers/factories';
 import PackingListPanel, { itemWeight } from './PackingListPanel';
 
 describe('itemWeight (bag total weight calc)', () => {
@@ -28,18 +28,10 @@ beforeEach(() => {
   resetAllStores();
   // Side-effect APIs PackingListPanel calls on mount
   server.use(
-    http.get('/api/trips/:id/members', () =>
-      HttpResponse.json({ owner: null, members: [], current_user_id: 1 })
-    ),
-    http.get('/api/trips/:id/packing/category-assignees', () =>
-      HttpResponse.json({ assignees: {} })
-    ),
-    http.get('/api/admin/bag-tracking', () =>
-      HttpResponse.json({ enabled: false })
-    ),
-    http.get('/api/admin/packing-templates', () =>
-      HttpResponse.json({ templates: [] })
-    ),
+    http.get('/api/trips/:id/members', () => HttpResponse.json({ owner: null, members: [], current_user_id: 1 })),
+    http.get('/api/trips/:id/packing/category-assignees', () => HttpResponse.json({ assignees: {} })),
+    http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: false })),
+    http.get('/api/admin/packing-templates', () => HttpResponse.json({ templates: [] }))
   );
   seedStore(useAuthStore, { user: buildUser(), isAuthenticated: true });
   seedStore(useTripStore, { trip: buildTrip({ id: 1 }) });
@@ -74,35 +66,26 @@ describe('PackingListPanel', () => {
   });
 
   it('FE-COMP-PACKING-005: shows category group headers', () => {
-    const items = [
-      buildPackingItem({ name: 'Toothbrush', category: 'Hygiene' }),
-    ];
+    const items = [buildPackingItem({ name: 'Toothbrush', category: 'Hygiene' })];
     render(<PackingListPanel tripId={1} items={items} />);
     expect(screen.getByText('Hygiene')).toBeInTheDocument();
   });
 
   it('FE-COMP-PACKING-006: shows progress count in subtitle', () => {
-    const items = [
-      buildPackingItem({ name: 'Item1', checked: 1 }),
-      buildPackingItem({ name: 'Item2', checked: 0 }),
-    ];
+    const items = [buildPackingItem({ name: 'Item1', checked: 1 }), buildPackingItem({ name: 'Item2', checked: 0 })];
     render(<PackingListPanel tripId={1} items={items} />);
     expect(screen.getByText(/1 of 2 packed/i)).toBeInTheDocument();
   });
 
   it('FE-COMP-PACKING-007: shows progress bar for packed items', () => {
-    const items = [
-      buildPackingItem({ name: 'Item1', checked: 1 }),
-    ];
+    const items = [buildPackingItem({ name: 'Item1', checked: 1 })];
     render(<PackingListPanel tripId={1} items={items} />);
     // 1/1 = 100% packed shows "All packed!"
     expect(screen.getByText('All packed!')).toBeInTheDocument();
   });
 
   it('FE-COMP-PACKING-008: items without category are grouped under default category', () => {
-    const items = [
-      buildPackingItem({ name: 'Sunscreen', category: null }),
-    ];
+    const items = [buildPackingItem({ name: 'Sunscreen', category: null })];
     render(<PackingListPanel tripId={1} items={items} />);
     expect(screen.getByText('Sunscreen')).toBeInTheDocument();
     // default category is "Other"
@@ -125,7 +108,7 @@ describe('PackingListPanel', () => {
     server.use(
       http.post('/api/trips/1/packing', async ({ request }) => {
         postCalled = true;
-        const body = await request.json() as Record<string, unknown>;
+        const body = (await request.json()) as Record<string, unknown>;
         const item = buildPackingItem({ name: String(body.name), category: String(body.category) });
         return HttpResponse.json({ item });
       })
@@ -224,9 +207,7 @@ describe('PackingListPanel', () => {
 
   it('FE-COMP-PACKING-020: renders empty filter message when filter yields nothing', async () => {
     const user = userEvent.setup();
-    const items = [
-      buildPackingItem({ name: 'Open Item', checked: 0, category: 'Test' }),
-    ];
+    const items = [buildPackingItem({ name: 'Open Item', checked: 0, category: 'Test' })];
     render(<PackingListPanel tripId={1} items={items} />);
     await user.click(screen.getByText('Done'));
     expect(screen.getByText('No items match this filter')).toBeInTheDocument();
@@ -238,7 +219,7 @@ describe('PackingListPanel', () => {
     let patchBody: Record<string, unknown> | null = null;
     server.use(
       http.put('/api/trips/1/packing/42', async ({ request }) => {
-        patchBody = await request.json() as Record<string, unknown>;
+        patchBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ item: buildPackingItem({ id: 42, name: 'Sunblock', category: 'Toiletries' }) });
       })
     );
@@ -265,7 +246,7 @@ describe('PackingListPanel', () => {
     let patchBody: Record<string, unknown> | null = null;
     server.use(
       http.put('/api/trips/1/packing/50', async ({ request }) => {
-        patchBody = await request.json() as Record<string, unknown>;
+        patchBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ item: buildPackingItem({ id: 50, checked: 1 }) });
       })
     );
@@ -312,7 +293,7 @@ describe('PackingListPanel', () => {
     let patchBody: Record<string, unknown> | null = null;
     server.use(
       http.put('/api/trips/1/packing/70', async ({ request }) => {
-        patchBody = await request.json() as Record<string, unknown>;
+        patchBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ item: buildPackingItem({ id: 70, quantity: 5 }) });
       })
     );
@@ -332,7 +313,7 @@ describe('PackingListPanel', () => {
     let postBody: Record<string, unknown> | null = null;
     server.use(
       http.post('/api/trips/1/packing', async ({ request }) => {
-        postBody = await request.json() as Record<string, unknown>;
+        postBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ item: buildPackingItem({ name: '...', category: 'Valuables' }) });
       })
     );
@@ -457,11 +438,11 @@ describe('PackingListPanel', () => {
 
   it('FE-COMP-PACKING-034: bag tracking enabled shows Bags button and bag sidebar', async () => {
     server.use(
-      http.get('/api/admin/bag-tracking', () =>
-        HttpResponse.json({ enabled: true })
-      ),
+      http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [{ id: 1, name: 'Carry-on', color: '#6366f1', weight_limit_grams: null, members: [] }] })
+        HttpResponse.json({
+          bags: [{ id: 1, name: 'Carry-on', color: '#6366f1', weight_limit_grams: null, members: [] }],
+        })
       )
     );
     const items = [buildPackingItem({ name: 'Laptop', category: 'Electronics' })];
@@ -480,7 +461,7 @@ describe('PackingListPanel', () => {
     let putBody: Record<string, unknown> | null = null;
     server.use(
       http.put('/api/trips/1/packing/90', async ({ request }) => {
-        putBody = await request.json() as Record<string, unknown>;
+        putBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ item: buildPackingItem({ id: 90, name: 'Shirt', category: 'Apparel' }) });
       })
     );
@@ -556,11 +537,11 @@ describe('PackingListPanel', () => {
   it('FE-COMP-PACKING-039: bag modal opens when Bags button clicked with bag tracking enabled', async () => {
     const user = userEvent.setup();
     server.use(
-      http.get('/api/admin/bag-tracking', () =>
-        HttpResponse.json({ enabled: true })
-      ),
+      http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [{ id: 1, name: 'Main Bag', color: '#6366f1', weight_limit_grams: null, members: [] }] })
+        HttpResponse.json({
+          bags: [{ id: 1, name: 'Main Bag', color: '#6366f1', weight_limit_grams: null, members: [] }],
+        })
       )
     );
     const items = [buildPackingItem({ name: 'Charger', category: 'Electronics' })];
@@ -585,11 +566,11 @@ describe('PackingListPanel', () => {
 
   it('FE-COMP-PACKING-040: bag sidebar renders BagCard with bag name when enabled and bags exist', async () => {
     server.use(
-      http.get('/api/admin/bag-tracking', () =>
-        HttpResponse.json({ enabled: true })
-      ),
+      http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [{ id: 5, name: 'Backpack', color: '#10b981', weight_limit_grams: 10000, members: [] }] })
+        HttpResponse.json({
+          bags: [{ id: 5, name: 'Backpack', color: '#10b981', weight_limit_grams: 10000, members: [] }],
+        })
       )
     );
     const items = [buildPackingItem({ name: 'Laptop', category: 'Tech' })];
@@ -658,12 +639,8 @@ describe('PackingListPanel', () => {
 
   it('FE-COMP-PACKING-044: bag item row shows weight input and bag button when bag tracking enabled', async () => {
     server.use(
-      http.get('/api/admin/bag-tracking', () =>
-        HttpResponse.json({ enabled: true })
-      ),
-      http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [] })
-      )
+      http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
+      http.get('/api/trips/:id/packing/bags', () => HttpResponse.json({ bags: [] }))
     );
     const items = [buildPackingItem({ name: 'Laptop', category: 'Tech' })];
     const { container } = render(<PackingListPanel tripId={1} items={items} />);
@@ -683,9 +660,7 @@ describe('PackingListPanel', () => {
       buildPackingItem({ name: 'Done1', checked: 1, category: 'Test' }),
       buildPackingItem({ name: 'Done2', checked: 1, category: 'Test' }),
     ];
-    server.use(
-      http.delete('/api/trips/1/packing/:itemId', () => HttpResponse.json({ success: true }))
-    );
+    server.use(http.delete('/api/trips/1/packing/:itemId', () => HttpResponse.json({ success: true })));
     // Mock window.confirm to return true
     vi.spyOn(window, 'confirm').mockReturnValue(true);
 
@@ -710,13 +685,11 @@ describe('PackingListPanel', () => {
     let savedTemplateName = '';
     server.use(
       http.post('/api/trips/1/packing/save-as-template', async ({ request }) => {
-        const body = await request.json() as Record<string, unknown>;
+        const body = (await request.json()) as Record<string, unknown>;
         savedTemplateName = String(body.name);
         return HttpResponse.json({ success: true });
       }),
-      http.get('/api/admin/packing-templates', () =>
-        HttpResponse.json({ templates: [] })
-      )
+      http.get('/api/admin/packing-templates', () => HttpResponse.json({ templates: [] }))
     );
     const items = [buildPackingItem({ name: 'Item', category: 'Test' })];
     const { container } = render(<PackingListPanel tripId={1} items={items} />);
@@ -736,11 +709,11 @@ describe('PackingListPanel', () => {
   it('FE-COMP-PACKING-047: bag picker in item row opens when clicked with bag tracking enabled', async () => {
     const user = userEvent.setup();
     server.use(
-      http.get('/api/admin/bag-tracking', () =>
-        HttpResponse.json({ enabled: true })
-      ),
+      http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [{ id: 3, name: 'Carry-on', color: '#ec4899', weight_limit_grams: null, members: [] }] })
+        HttpResponse.json({
+          bags: [{ id: 3, name: 'Carry-on', color: '#ec4899', weight_limit_grams: null, members: [] }],
+        })
       )
     );
     const items = [buildPackingItem({ name: 'Laptop', category: 'Tech' })];
@@ -765,11 +738,11 @@ describe('PackingListPanel', () => {
   it('FE-COMP-PACKING-048: add bag in bag modal opens form when "Add bag" clicked', async () => {
     const user = userEvent.setup();
     server.use(
-      http.get('/api/admin/bag-tracking', () =>
-        HttpResponse.json({ enabled: true })
-      ),
+      http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [{ id: 1, name: 'Main Bag', color: '#6366f1', weight_limit_grams: null, members: [] }] })
+        HttpResponse.json({
+          bags: [{ id: 1, name: 'Main Bag', color: '#6366f1', weight_limit_grams: null, members: [] }],
+        })
       )
     );
     const items = [buildPackingItem({ name: 'Jacket', category: 'Clothing' })];
@@ -805,14 +778,10 @@ describe('PackingListPanel', () => {
     let putBody: Record<string, unknown> | null = null;
     const itemId = 120;
     server.use(
-      http.get('/api/admin/bag-tracking', () =>
-        HttpResponse.json({ enabled: true })
-      ),
-      http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [] })
-      ),
+      http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
+      http.get('/api/trips/:id/packing/bags', () => HttpResponse.json({ bags: [] })),
       http.put(`/api/trips/1/packing/${itemId}`, async ({ request }) => {
-        putBody = await request.json() as Record<string, unknown>;
+        putBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ item: buildPackingItem({ id: itemId }) });
       })
     );
@@ -861,14 +830,14 @@ describe('PackingListPanel', () => {
     const itemId = 130;
     let putBody: Record<string, unknown> | null = null;
     server.use(
-      http.get('/api/admin/bag-tracking', () =>
-        HttpResponse.json({ enabled: true })
-      ),
+      http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [{ id: 7, name: 'Trolley', color: '#10b981', weight_limit_grams: null, members: [] }] })
+        HttpResponse.json({
+          bags: [{ id: 7, name: 'Trolley', color: '#10b981', weight_limit_grams: null, members: [] }],
+        })
       ),
       http.put(`/api/trips/1/packing/${itemId}`, async ({ request }) => {
-        putBody = await request.json() as Record<string, unknown>;
+        putBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ item: buildPackingItem({ id: itemId }) });
       })
     );
@@ -930,9 +899,7 @@ describe('PackingListPanel', () => {
   it('FE-COMP-PACKING-054: item with assigned bag shows "Unassigned" option in bag picker', async () => {
     const itemId = 140;
     server.use(
-      http.get('/api/admin/bag-tracking', () =>
-        HttpResponse.json({ enabled: true })
-      ),
+      http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () =>
         HttpResponse.json({ bags: [{ id: 5, name: 'MyBag', color: '#ec4899', weight_limit_grams: null, members: [] }] })
       ),
@@ -1003,7 +970,7 @@ describe('PackingListPanel', () => {
     let putBody: Record<string, unknown> | null = null;
     server.use(
       http.put('/api/trips/1/packing/71', async ({ request }) => {
-        putBody = await request.json() as Record<string, unknown>;
+        putBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ item: buildPackingItem({ id: 71, quantity: 7 }) });
       })
     );
@@ -1039,7 +1006,7 @@ describe('PackingListPanel', () => {
     let putBody: Record<string, unknown> | null = null;
     server.use(
       http.put('/api/trips/1/packing/74', async ({ request }) => {
-        putBody = await request.json() as Record<string, unknown>;
+        putBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ item: buildPackingItem({ id: 74, category: 'Documents' }) });
       })
     );
@@ -1067,7 +1034,7 @@ describe('PackingListPanel', () => {
         })
       ),
       http.put('/api/trips/1/packing/category-assignees/:cat', async ({ request }) => {
-        assignBody = await request.json() as Record<string, unknown>;
+        assignBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ assignees: [{ user_id: 2, username: 'alice', avatar: null }] });
       })
     );
@@ -1102,7 +1069,7 @@ describe('PackingListPanel', () => {
         })
       ),
       http.put('/api/trips/1/packing/category-assignees/:cat', async ({ request }) => {
-        putBody = await request.json() as Record<string, unknown>;
+        putBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ assignees: [] });
       })
     );
@@ -1151,7 +1118,7 @@ describe('PackingListPanel', () => {
     let importBody: Record<string, unknown> | null = null;
     server.use(
       http.post('/api/trips/1/packing/import', async ({ request }) => {
-        importBody = await request.json() as Record<string, unknown>;
+        importBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ count: 2 });
       })
     );
@@ -1180,11 +1147,15 @@ describe('PackingListPanel', () => {
       http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       // Start with one bag so the sidebar renders (sidebar requires bags.length > 0)
       http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [{ id: 1, name: 'Existing Bag', color: '#6366f1', weight_limit_grams: null, members: [] }] })
+        HttpResponse.json({
+          bags: [{ id: 1, name: 'Existing Bag', color: '#6366f1', weight_limit_grams: null, members: [] }],
+        })
       ),
       http.post('/api/trips/1/packing/bags', async ({ request }) => {
-        createBody = await request.json() as Record<string, unknown>;
-        return HttpResponse.json({ bag: { id: 10, name: 'Hiking Pack', color: '#ec4899', weight_limit_grams: null, members: [] } });
+        createBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          bag: { id: 10, name: 'Hiking Pack', color: '#ec4899', weight_limit_grams: null, members: [] },
+        });
       })
     );
     const items = [buildPackingItem({ name: 'Boots', category: 'Clothing' })];
@@ -1209,7 +1180,9 @@ describe('PackingListPanel', () => {
     server.use(
       http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [{ id: 9, name: 'Old Bag', color: '#6366f1', weight_limit_grams: null, members: [] }] })
+        HttpResponse.json({
+          bags: [{ id: 9, name: 'Old Bag', color: '#6366f1', weight_limit_grams: null, members: [] }],
+        })
       ),
       http.delete('/api/trips/1/packing/bags/9', () => {
         deleteCalled = true;
@@ -1237,11 +1210,15 @@ describe('PackingListPanel', () => {
     server.use(
       http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [{ id: 11, name: 'Carry-on', color: '#10b981', weight_limit_grams: null, members: [] }] })
+        HttpResponse.json({
+          bags: [{ id: 11, name: 'Carry-on', color: '#10b981', weight_limit_grams: null, members: [] }],
+        })
       ),
       http.put('/api/trips/1/packing/bags/11', async ({ request }) => {
-        updateBody = await request.json() as Record<string, unknown>;
-        return HttpResponse.json({ bag: { id: 11, name: 'Luggage', color: '#10b981', weight_limit_grams: null, members: [] } });
+        updateBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          bag: { id: 11, name: 'Luggage', color: '#10b981', weight_limit_grams: null, members: [] },
+        });
       })
     );
     const items = [buildPackingItem({ name: 'Shoes', category: 'Clothing' })];
@@ -1275,7 +1252,9 @@ describe('PackingListPanel', () => {
       ),
       http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [{ id: 12, name: 'Day Pack', color: '#ec4899', weight_limit_grams: null, members: [] }] })
+        HttpResponse.json({
+          bags: [{ id: 12, name: 'Day Pack', color: '#ec4899', weight_limit_grams: null, members: [] }],
+        })
       )
     );
     const items = [buildPackingItem({ name: 'Camera', category: 'Electronics' })];
@@ -1316,10 +1295,12 @@ describe('PackingListPanel', () => {
       ),
       http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () =>
-        HttpResponse.json({ bags: [{ id: 13, name: 'Weekend Bag', color: '#f97316', weight_limit_grams: null, members: [] }] })
+        HttpResponse.json({
+          bags: [{ id: 13, name: 'Weekend Bag', color: '#f97316', weight_limit_grams: null, members: [] }],
+        })
       ),
       http.put('/api/trips/1/packing/bags/13/members', async ({ request }) => {
-        membersBody = await request.json() as Record<string, unknown>;
+        membersBody = (await request.json()) as Record<string, unknown>;
         return HttpResponse.json({ members: [{ user_id: 3, username: 'carol', avatar: null }] });
       })
     );
@@ -1355,12 +1336,12 @@ describe('PackingListPanel', () => {
       http.get('/api/admin/bag-tracking', () => HttpResponse.json({ enabled: true })),
       http.get('/api/trips/:id/packing/bags', () => HttpResponse.json({ bags: [] })),
       http.post('/api/trips/1/packing/bags', async ({ request }) => {
-        createBody = await request.json() as Record<string, unknown>;
-        return HttpResponse.json({ bag: { id: 20, name: 'New Bag', color: '#6366f1', weight_limit_grams: null, members: [] } });
+        createBody = (await request.json()) as Record<string, unknown>;
+        return HttpResponse.json({
+          bag: { id: 20, name: 'New Bag', color: '#6366f1', weight_limit_grams: null, members: [] },
+        });
       }),
-      http.put('/api/trips/1/packing/150', async () =>
-        HttpResponse.json({ item: buildPackingItem({ id: 150 }) })
-      )
+      http.put('/api/trips/1/packing/150', async () => HttpResponse.json({ item: buildPackingItem({ id: 150 }) }))
     );
     const items = [buildPackingItem({ id: 150, name: 'Sunglasses', category: 'Accessories' })];
     const { container } = render(<PackingListPanel tripId={1} items={items} />);

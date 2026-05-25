@@ -1,13 +1,5 @@
-import express, { Request, Response } from 'express';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
 import { authenticate, demoUploadBlock } from '../middleware/auth';
 import { requireTripAccess } from '../middleware/tripAccess';
-import { broadcast } from '../websocket';
-import { AuthRequest } from '../types';
-import { checkPermission } from '../services/permissions';
 import {
   MAX_FILE_SIZE,
   BLOCKED_EXTENSIONS,
@@ -32,6 +24,15 @@ import {
   deleteFileLink,
   getFileLinks,
 } from '../services/fileService';
+import { checkPermission } from '../services/permissions';
+import { AuthRequest } from '../types';
+import { broadcast } from '../websocket';
+
+import express, { Request, Response } from 'express';
+import fs from 'fs';
+import multer from 'multer';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 const router = express.Router({ mergeParams: true });
 
@@ -61,7 +62,9 @@ const upload = multer({
       err.statusCode = 400;
       return cb(err);
     }
-    const allowed = getAllowedExtensions().split(',').map(e => e.trim().toLowerCase());
+    const allowed = getAllowedExtensions()
+      .split(',')
+      .map((e) => e.trim().toLowerCase());
     const fileExt = ext.replace('.', '');
     if (allowed.includes(fileExt) || (allowed.includes('*') && !BLOCKED_EXTENSIONS.includes(ext))) {
       cb(null, true);
@@ -117,20 +120,29 @@ router.get('/', authenticate, (req: Request, res: Response) => {
 });
 
 // Upload file
-router.post('/', authenticate, requireTripAccess, demoUploadBlock, upload.single('file'), (req: Request, res: Response) => {
-  const authReq = req as AuthRequest;
-  const { tripId } = req.params;
-  const { user_id: tripOwnerId } = authReq.trip!;
-  if (!checkPermission('file_upload', authReq.user.role, tripOwnerId, authReq.user.id, tripOwnerId !== authReq.user.id))
-    return res.status(403).json({ error: 'No permission to upload files' });
+router.post(
+  '/',
+  authenticate,
+  requireTripAccess,
+  demoUploadBlock,
+  upload.single('file'),
+  (req: Request, res: Response) => {
+    const authReq = req as AuthRequest;
+    const { tripId } = req.params;
+    const { user_id: tripOwnerId } = authReq.trip;
+    if (
+      !checkPermission('file_upload', authReq.user.role, tripOwnerId, authReq.user.id, tripOwnerId !== authReq.user.id)
+    )
+      return res.status(403).json({ error: 'No permission to upload files' });
 
-  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
-  const { place_id, description, reservation_id } = req.body;
-  const created = createFile(tripId, req.file, authReq.user.id, { place_id, description, reservation_id });
-  res.status(201).json({ file: created });
-  broadcast(tripId, 'file:created', { file: created }, req.headers['x-socket-id'] as string);
-});
+    const { place_id, description, reservation_id } = req.body;
+    const created = createFile(tripId, req.file, authReq.user.id, { place_id, description, reservation_id });
+    res.status(201).json({ file: created });
+    broadcast(tripId, 'file:created', { file: created }, req.headers['x-socket-id'] as string);
+  },
+);
 
 // Update file metadata
 router.put('/:id', authenticate, (req: Request, res: Response) => {
@@ -140,7 +152,15 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
 
   const access = verifyTripAccess(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('file_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'file_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission to edit files' });
 
   const file = getFileById(id, tripId);
@@ -176,7 +196,15 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
 
   const access = verifyTripAccess(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('file_delete', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'file_delete',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission to delete files' });
 
   const file = getFileById(id, tripId);
@@ -194,7 +222,9 @@ router.post('/:id/restore', authenticate, (req: Request, res: Response) => {
 
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('file_delete', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('file_delete', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const file = getDeletedFile(id, tripId);
@@ -212,7 +242,9 @@ router.delete('/:id/permanent', authenticate, async (req: Request, res: Response
 
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('file_delete', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('file_delete', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const file = getDeletedFile(id, tripId);
@@ -230,7 +262,9 @@ router.delete('/trash/empty', authenticate, async (req: Request, res: Response) 
 
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('file_delete', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('file_delete', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const deleted = await emptyTrash(tripId);

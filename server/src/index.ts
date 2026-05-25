@@ -1,16 +1,19 @@
-import 'reflect-metadata';
-import 'dotenv/config';
-import path from 'node:path';
-import fs from 'node:fs';
-import http from 'node:http';
-import express from 'express';
-import cookieParser from 'cookie-parser';
-import { NestFactory } from '@nestjs/core';
-import { ExpressAdapter } from '@nestjs/platform-express';
-import type { INestApplication } from '@nestjs/common';
 import { createApp } from './app';
 import { AppModule } from './nest/app.module';
 import { getNestPrefixes, makeNestPathMatcher } from './nest/strangler';
+import * as scheduler from './scheduler';
+import { getAppUrl, getMcpSafeUrl } from './services/notifications';
+import type { INestApplication } from '@nestjs/common';
+import { NestFactory } from '@nestjs/core';
+import { ExpressAdapter } from '@nestjs/platform-express';
+
+import cookieParser from 'cookie-parser';
+import 'dotenv/config';
+import express from 'express';
+import fs from 'node:fs';
+import http from 'node:http';
+import path from 'node:path';
+import 'reflect-metadata';
 
 // Create upload and data directories on startup
 const uploadsDir = path.join(__dirname, '../uploads');
@@ -21,7 +24,7 @@ const avatarsDir = path.join(uploadsDir, 'avatars');
 const backupsDir = path.join(__dirname, '../data/backups');
 const tmpDir = path.join(__dirname, '../data/tmp');
 
-[uploadsDir, photosDir, filesDir, coversDir, avatarsDir, backupsDir, tmpDir].forEach(dir => {
+[uploadsDir, photosDir, filesDir, coversDir, avatarsDir, backupsDir, tmpDir].forEach((dir) => {
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
 });
 
@@ -29,9 +32,6 @@ const tmpDir = path.join(__dirname, '../data/tmp');
 // in front of it (strangler pattern): migrated route prefixes are served by Nest,
 // everything else falls through to this app via a fallback middleware.
 const legacyApp = createApp();
-
-import * as scheduler from './scheduler';
-import { getAppUrl, getMcpSafeUrl } from './services/notifications';
 
 const PORT = Number(process.env.PORT) || 3001;
 const HOST = process.env.HOST;
@@ -60,7 +60,7 @@ const onListen = () => {
     `  User:           uid=${process.getuid?.()} gid=${process.getgid?.()}`,
     '──────────────────────────────────────',
   ];
-  banner.forEach(l => console.log(l));
+  banner.forEach((l) => console.log(l));
   sLogInfo(
     NEST_PREFIXES.length
       ? `NestJS handling prefixes: ${NEST_PREFIXES.join(', ')} (override via NEST_PREFIXES)`
@@ -68,17 +68,21 @@ const onListen = () => {
   );
   if (process.env.APP_URL) {
     let parsedAppUrl: URL | null = null;
-    try { parsedAppUrl = new URL(process.env.APP_URL); } catch { /* invalid */ }
+    try {
+      parsedAppUrl = new URL(process.env.APP_URL);
+    } catch {
+      /* invalid */
+    }
 
     if (!parsedAppUrl) {
       sLogWarn(`APP_URL: "${process.env.APP_URL}" is not a valid URL — it will be ignored.`);
     }
 
-    const mcpSafe = parsedAppUrl !== null && (
-      parsedAppUrl.protocol === 'https:' ||
-      parsedAppUrl.hostname === 'localhost' ||
-      parsedAppUrl.hostname === '127.0.0.1'
-    );
+    const mcpSafe =
+      parsedAppUrl !== null &&
+      (parsedAppUrl.protocol === 'https:' ||
+        parsedAppUrl.hostname === 'localhost' ||
+        parsedAppUrl.hostname === '127.0.0.1');
     if (!mcpSafe) {
       sLogWarn(`APP_URL: not MCP-safe (requires https:// or http://localhost) — MCP will use ${resolvedAppUrl}.`);
     }

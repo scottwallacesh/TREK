@@ -1,20 +1,35 @@
-import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
-import { z } from 'zod';
+import { ADDON_IDS } from '../../addons';
 import { canAccessTrip } from '../../db/database';
+import { isAddonEnabled, getCollabFeatures } from '../../services/adminService';
 import { isDemoUser } from '../../services/authService';
 import {
-  createNote as createCollabNote, updateNote as updateCollabNote, deleteNote as deleteCollabNote,
-  listPolls, createPoll, votePoll, closePoll, deletePoll,
-  listMessages, createMessage, deleteMessage, addOrRemoveReaction,
+  createNote as createCollabNote,
+  updateNote as updateCollabNote,
+  deleteNote as deleteCollabNote,
+  listPolls,
+  createPoll,
+  votePoll,
+  closePoll,
+  deletePoll,
+  listMessages,
+  createMessage,
+  deleteMessage,
+  addOrRemoveReaction,
 } from '../../services/collabService';
-import { isAddonEnabled, getCollabFeatures } from '../../services/adminService';
-import { ADDON_IDS } from '../../addons';
-import {
-  safeBroadcast, TOOL_ANNOTATIONS_WRITE, TOOL_ANNOTATIONS_DELETE,
-  TOOL_ANNOTATIONS_NON_IDEMPOTENT, TOOL_ANNOTATIONS_READONLY,
-  demoDenied, noAccess, ok,
-} from './_shared';
 import { canRead, canWrite } from '../scopes';
+import {
+  safeBroadcast,
+  TOOL_ANNOTATIONS_WRITE,
+  TOOL_ANNOTATIONS_DELETE,
+  TOOL_ANNOTATIONS_NON_IDEMPOTENT,
+  TOOL_ANNOTATIONS_READONLY,
+  demoDenied,
+  noAccess,
+  ok,
+} from './_shared';
+import { McpServer } from '@modelcontextprotocol/sdk/server/mcp';
+
+import { z } from 'zod';
 
 export function registerCollabTools(server: McpServer, userId: number, scopes: string[] | null): void {
   const R = canRead(scopes, 'collab');
@@ -26,78 +41,90 @@ export function registerCollabTools(server: McpServer, userId: number, scopes: s
 
   // --- COLLAB NOTES ---
 
-  if (features.notes && W) server.registerTool(
-    'create_collab_note',
-    {
-      description: 'Create a shared collaborative note on a trip (visible to all trip members in the Collab tab).',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-        title: z.string().min(1).max(200),
-        content: z.string().max(10000).optional(),
-        category: z.string().max(100).optional().describe('Note category (e.g. "Ideas", "To-do", "General")'),
-        color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().describe('Hex color for the note card'),
-        pinned: z.boolean().optional().default(false).describe('Pin the note to the top'),
+  if (features.notes && W)
+    server.registerTool(
+      'create_collab_note',
+      {
+        description: 'Create a shared collaborative note on a trip (visible to all trip members in the Collab tab).',
+        inputSchema: {
+          tripId: z.number().int().positive(),
+          title: z.string().min(1).max(200),
+          content: z.string().max(10000).optional(),
+          category: z.string().max(100).optional().describe('Note category (e.g. "Ideas", "To-do", "General")'),
+          color: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .optional()
+            .describe('Hex color for the note card'),
+          pinned: z.boolean().optional().default(false).describe('Pin the note to the top'),
+        },
+        annotations: TOOL_ANNOTATIONS_NON_IDEMPOTENT,
       },
-      annotations: TOOL_ANNOTATIONS_NON_IDEMPOTENT,
-    },
-    async ({ tripId, title, content, category, color, pinned }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!canAccessTrip(tripId, userId)) return noAccess();
-      const note = createCollabNote(tripId, userId, { title, content, category, color, pinned });
-      safeBroadcast(tripId, 'collab:note:created', { note });
-      return ok({ note });
-    }
-  );
+      async ({ tripId, title, content, category, color, pinned }) => {
+        if (isDemoUser(userId)) return demoDenied();
+        if (!canAccessTrip(tripId, userId)) return noAccess();
+        const note = createCollabNote(tripId, userId, { title, content, category, color, pinned });
+        safeBroadcast(tripId, 'collab:note:created', { note });
+        return ok({ note });
+      },
+    );
 
-  if (features.notes && W) server.registerTool(
-    'update_collab_note',
-    {
-      description: 'Edit an existing collaborative note on a trip.',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-        noteId: z.number().int().positive(),
-        title: z.string().min(1).max(200).optional(),
-        content: z.string().max(10000).optional(),
-        category: z.string().max(100).optional(),
-        color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional().describe('Hex color for the note card'),
-        pinned: z.boolean().optional().describe('Pin the note to the top'),
+  if (features.notes && W)
+    server.registerTool(
+      'update_collab_note',
+      {
+        description: 'Edit an existing collaborative note on a trip.',
+        inputSchema: {
+          tripId: z.number().int().positive(),
+          noteId: z.number().int().positive(),
+          title: z.string().min(1).max(200).optional(),
+          content: z.string().max(10000).optional(),
+          category: z.string().max(100).optional(),
+          color: z
+            .string()
+            .regex(/^#[0-9a-fA-F]{6}$/)
+            .optional()
+            .describe('Hex color for the note card'),
+          pinned: z.boolean().optional().describe('Pin the note to the top'),
+        },
+        annotations: TOOL_ANNOTATIONS_WRITE,
       },
-      annotations: TOOL_ANNOTATIONS_WRITE,
-    },
-    async ({ tripId, noteId, title, content, category, color, pinned }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!canAccessTrip(tripId, userId)) return noAccess();
-      const note = updateCollabNote(tripId, noteId, { title, content, category, color, pinned });
-      if (!note) return { content: [{ type: 'text' as const, text: 'Note not found.' }], isError: true };
-      safeBroadcast(tripId, 'collab:note:updated', { note });
-      return ok({ note });
-    }
-  );
+      async ({ tripId, noteId, title, content, category, color, pinned }) => {
+        if (isDemoUser(userId)) return demoDenied();
+        if (!canAccessTrip(tripId, userId)) return noAccess();
+        const note = updateCollabNote(tripId, noteId, { title, content, category, color, pinned });
+        if (!note) return { content: [{ type: 'text' as const, text: 'Note not found.' }], isError: true };
+        safeBroadcast(tripId, 'collab:note:updated', { note });
+        return ok({ note });
+      },
+    );
 
-  if (features.notes && W) server.registerTool(
-    'delete_collab_note',
-    {
-      description: 'Delete a collaborative note from a trip.',
-      inputSchema: {
-        tripId: z.number().int().positive(),
-        noteId: z.number().int().positive(),
+  if (features.notes && W)
+    server.registerTool(
+      'delete_collab_note',
+      {
+        description: 'Delete a collaborative note from a trip.',
+        inputSchema: {
+          tripId: z.number().int().positive(),
+          noteId: z.number().int().positive(),
+        },
+        annotations: TOOL_ANNOTATIONS_DELETE,
       },
-      annotations: TOOL_ANNOTATIONS_DELETE,
-    },
-    async ({ tripId, noteId }) => {
-      if (isDemoUser(userId)) return demoDenied();
-      if (!canAccessTrip(tripId, userId)) return noAccess();
-      const deleted = deleteCollabNote(tripId, noteId);
-      if (!deleted) return { content: [{ type: 'text' as const, text: 'Note not found.' }], isError: true };
-      safeBroadcast(tripId, 'collab:note:deleted', { noteId });
-      return ok({ success: true });
-    }
-  );
+      async ({ tripId, noteId }) => {
+        if (isDemoUser(userId)) return demoDenied();
+        if (!canAccessTrip(tripId, userId)) return noAccess();
+        const deleted = deleteCollabNote(tripId, noteId);
+        if (!deleted) return { content: [{ type: 'text' as const, text: 'Note not found.' }], isError: true };
+        safeBroadcast(tripId, 'collab:note:deleted', { noteId });
+        return ok({ success: true });
+      },
+    );
 
   // --- COLLAB POLLS & CHAT ---
 
-  if (features.polls && R) server.registerTool(
-    'list_collab_polls',
+  if (features.polls && R)
+    server.registerTool(
+      'list_collab_polls',
       {
         description: 'List all polls for a trip.',
         inputSchema: {
@@ -109,10 +136,11 @@ export function registerCollabTools(server: McpServer, userId: number, scopes: s
         if (!canAccessTrip(tripId, userId)) return noAccess();
         const polls = listPolls(tripId);
         return ok({ polls });
-      }
+      },
     );
 
-    if (features.polls && W) server.registerTool(
+  if (features.polls && W)
+    server.registerTool(
       'create_collab_poll',
       {
         description: 'Create a new poll in the collab panel.',
@@ -131,10 +159,11 @@ export function registerCollabTools(server: McpServer, userId: number, scopes: s
         const poll = createPoll(tripId, userId, { question, options, multiple, deadline });
         safeBroadcast(tripId, 'collab:poll:created', { poll });
         return ok({ poll });
-      }
+      },
     );
 
-    if (features.polls && W) server.registerTool(
+  if (features.polls && W)
+    server.registerTool(
       'vote_collab_poll',
       {
         description: 'Vote on a poll option (or remove vote if already voted for that option).',
@@ -151,10 +180,11 @@ export function registerCollabTools(server: McpServer, userId: number, scopes: s
         if (result.error) return { content: [{ type: 'text' as const, text: result.error }], isError: true };
         safeBroadcast(tripId, 'collab:poll:voted', { poll: result.poll });
         return ok({ poll: result.poll });
-      }
+      },
     );
 
-    if (features.polls && W) server.registerTool(
+  if (features.polls && W)
+    server.registerTool(
       'close_collab_poll',
       {
         description: 'Close a poll so no more votes can be cast.',
@@ -171,10 +201,11 @@ export function registerCollabTools(server: McpServer, userId: number, scopes: s
         if (!poll) return { content: [{ type: 'text' as const, text: 'Poll not found.' }], isError: true };
         safeBroadcast(tripId, 'collab:poll:closed', { poll });
         return ok({ poll });
-      }
+      },
     );
 
-    if (features.polls && W) server.registerTool(
+  if (features.polls && W)
+    server.registerTool(
       'delete_collab_poll',
       {
         description: 'Delete a poll and all its votes.',
@@ -191,10 +222,11 @@ export function registerCollabTools(server: McpServer, userId: number, scopes: s
         if (!deleted) return { content: [{ type: 'text' as const, text: 'Poll not found.' }], isError: true };
         safeBroadcast(tripId, 'collab:poll:deleted', { pollId });
         return ok({ success: true });
-      }
+      },
     );
 
-    if (features.chat && R) server.registerTool(
+  if (features.chat && R)
+    server.registerTool(
       'list_collab_messages',
       {
         description: 'List chat messages for a trip (most recent 100, oldest-first).',
@@ -208,10 +240,11 @@ export function registerCollabTools(server: McpServer, userId: number, scopes: s
         if (!canAccessTrip(tripId, userId)) return noAccess();
         const messages = listMessages(tripId, before);
         return ok({ messages });
-      }
+      },
     );
 
-    if (features.chat && W) server.registerTool(
+  if (features.chat && W)
+    server.registerTool(
       'send_collab_message',
       {
         description: "Send a chat message to a trip's collab channel.",
@@ -229,10 +262,11 @@ export function registerCollabTools(server: McpServer, userId: number, scopes: s
         if (result.error) return { content: [{ type: 'text' as const, text: result.error }], isError: true };
         safeBroadcast(tripId, 'collab:message:created', { message: result.message });
         return ok({ message: result.message });
-      }
+      },
     );
 
-    if (features.chat && W) server.registerTool(
+  if (features.chat && W)
+    server.registerTool(
       'delete_collab_message',
       {
         description: 'Delete a chat message (only the message owner can delete their own messages).',
@@ -249,10 +283,11 @@ export function registerCollabTools(server: McpServer, userId: number, scopes: s
         if (result.error) return { content: [{ type: 'text' as const, text: result.error }], isError: true };
         safeBroadcast(tripId, 'collab:message:deleted', { messageId, username: result.username });
         return ok({ success: true });
-      }
+      },
     );
 
-    if (features.chat && W) server.registerTool(
+  if (features.chat && W)
+    server.registerTool(
       'react_collab_message',
       {
         description: 'Toggle a reaction emoji on a chat message (adds if not present, removes if already reacted).',
@@ -270,6 +305,6 @@ export function registerCollabTools(server: McpServer, userId: number, scopes: s
         if (!result.found) return { content: [{ type: 'text' as const, text: 'Message not found.' }], isError: true };
         safeBroadcast(tripId, 'collab:message:reacted', { messageId, reactions: result.reactions });
         return ok({ reactions: result.reactions });
-      }
+      },
     );
 }

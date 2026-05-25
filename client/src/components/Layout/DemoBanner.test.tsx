@@ -1,6 +1,6 @@
-import { describe, it, expect, beforeEach, vi, afterEach } from 'vitest';
-import userEvent from '@testing-library/user-event';
 import { act, fireEvent } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { render, screen } from '../../../tests/helpers/render';
 import DemoBanner from './DemoBanner';
 

@@ -1,10 +1,11 @@
-import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
 import { requireTripAccess } from '../middleware/tripAccess';
-import { broadcast } from '../websocket';
+import * as dayService from '../services/dayService';
 import { checkPermission } from '../services/permissions';
 import { AuthRequest } from '../types';
-import * as dayService from '../services/dayService';
+import { broadcast } from '../websocket';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router({ mergeParams: true });
 
@@ -15,7 +16,15 @@ router.get('/', authenticate, requireTripAccess, (req: Request, res: Response) =
 
 router.post('/', authenticate, requireTripAccess, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'day_edit',
+      authReq.user.role,
+      authReq.trip.user_id,
+      authReq.user.id,
+      authReq.trip.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const { tripId } = req.params;
@@ -28,7 +37,15 @@ router.post('/', authenticate, requireTripAccess, (req: Request, res: Response) 
 
 router.put('/:id', authenticate, requireTripAccess, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'day_edit',
+      authReq.user.role,
+      authReq.trip.user_id,
+      authReq.user.id,
+      authReq.trip.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const { tripId, id } = req.params;
@@ -44,7 +61,15 @@ router.put('/:id', authenticate, requireTripAccess, (req: Request, res: Response
 
 router.delete('/:id', authenticate, requireTripAccess, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'day_edit',
+      authReq.user.role,
+      authReq.trip.user_id,
+      authReq.user.id,
+      authReq.trip.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const { tripId, id } = req.params;
@@ -69,7 +94,15 @@ accommodationsRouter.get('/', authenticate, requireTripAccess, (req: Request, re
 
 accommodationsRouter.post('/', authenticate, requireTripAccess, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'day_edit',
+      authReq.user.role,
+      authReq.trip.user_id,
+      authReq.user.id,
+      authReq.trip.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const { tripId } = req.params;
@@ -82,7 +115,16 @@ accommodationsRouter.post('/', authenticate, requireTripAccess, (req: Request, r
   const errors = dayService.validateAccommodationRefs(tripId, place_id, start_day_id, end_day_id);
   if (errors.length > 0) return res.status(404).json({ error: errors[0].message });
 
-  const accommodation = dayService.createAccommodation(tripId, { place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes });
+  const accommodation = dayService.createAccommodation(tripId, {
+    place_id,
+    start_day_id,
+    end_day_id,
+    check_in,
+    check_in_end,
+    check_out,
+    confirmation,
+    notes,
+  });
   res.status(201).json({ accommodation });
   broadcast(tripId, 'accommodation:created', { accommodation }, req.headers['x-socket-id'] as string);
   broadcast(tripId, 'reservation:created', {}, req.headers['x-socket-id'] as string);
@@ -90,7 +132,15 @@ accommodationsRouter.post('/', authenticate, requireTripAccess, (req: Request, r
 
 accommodationsRouter.put('/:id', authenticate, requireTripAccess, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'day_edit',
+      authReq.user.role,
+      authReq.trip.user_id,
+      authReq.user.id,
+      authReq.trip.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const { tripId, id } = req.params;
@@ -103,14 +153,31 @@ accommodationsRouter.put('/:id', authenticate, requireTripAccess, (req: Request,
   const errors = dayService.validateAccommodationRefs(tripId, place_id, start_day_id, end_day_id);
   if (errors.length > 0) return res.status(404).json({ error: errors[0].message });
 
-  const accommodation = dayService.updateAccommodation(id, existing, { place_id, start_day_id, end_day_id, check_in, check_in_end, check_out, confirmation, notes });
+  const accommodation = dayService.updateAccommodation(id, existing, {
+    place_id,
+    start_day_id,
+    end_day_id,
+    check_in,
+    check_in_end,
+    check_out,
+    confirmation,
+    notes,
+  });
   res.json({ accommodation });
   broadcast(tripId, 'accommodation:updated', { accommodation }, req.headers['x-socket-id'] as string);
 });
 
 accommodationsRouter.delete('/:id', authenticate, requireTripAccess, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  if (!checkPermission('day_edit', authReq.user.role, authReq.trip!.user_id, authReq.user.id, authReq.trip!.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'day_edit',
+      authReq.user.role,
+      authReq.trip.user_id,
+      authReq.user.id,
+      authReq.trip.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const { tripId, id } = req.params;
@@ -119,7 +186,12 @@ accommodationsRouter.delete('/:id', authenticate, requireTripAccess, (req: Reque
 
   const { linkedReservationId, deletedBudgetItemId } = dayService.deleteAccommodation(id);
   if (linkedReservationId) {
-    broadcast(tripId, 'reservation:deleted', { reservationId: linkedReservationId }, req.headers['x-socket-id'] as string);
+    broadcast(
+      tripId,
+      'reservation:deleted',
+      { reservationId: linkedReservationId },
+      req.headers['x-socket-id'] as string,
+    );
   }
   if (deletedBudgetItemId) {
     broadcast(tripId, 'budget:deleted', { itemId: deletedBudgetItemId }, req.headers['x-socket-id'] as string);

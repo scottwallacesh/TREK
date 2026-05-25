@@ -1,38 +1,41 @@
-import { useState } from 'react'
-import { NavLink, useNavigate } from 'react-router-dom'
-import { useAddonStore } from '../../store/addonStore'
-import { useAuthStore } from '../../store/authStore'
-import { useSettingsStore } from '../../store/settingsStore'
-import { useTranslation } from '../../i18n'
-import { Plane, CalendarDays, Globe, Compass, User, Settings, Shield, LogOut, X } from 'lucide-react'
-import type { LucideIcon } from 'lucide-react'
+import type { LucideIcon } from 'lucide-react';
+import { CalendarDays, Compass, Globe, LogOut, Plane, Settings, Shield, User } from 'lucide-react';
+import { useState } from 'react';
+import { NavLink, useNavigate } from 'react-router-dom';
+import { useTranslation } from '../../i18n';
+import { useAddonStore } from '../../store/addonStore';
+import { useAuthStore } from '../../store/authStore';
+import { useSettingsStore } from '../../store/settingsStore';
 
 const ADDON_NAV: Record<string, { icon: LucideIcon; labelKey: string }> = {
-  vacay:   { icon: CalendarDays, labelKey: 'admin.addons.catalog.vacay.name' },
-  atlas:   { icon: Globe,        labelKey: 'admin.addons.catalog.atlas.name' },
-  journey: { icon: Compass,      labelKey: 'admin.addons.catalog.journey.name' },
-}
+  vacay: { icon: CalendarDays, labelKey: 'admin.addons.catalog.vacay.name' },
+  atlas: { icon: Globe, labelKey: 'admin.addons.catalog.atlas.name' },
+  journey: { icon: Compass, labelKey: 'admin.addons.catalog.journey.name' },
+};
 
 export default function BottomNav() {
-  const { t } = useTranslation()
-  const darkMode = useSettingsStore(s => s.settings.dark_mode)
-  const dark = darkMode === true || darkMode === 'dark' || (darkMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches)
-  const addons = useAddonStore(s => s.addons)
-  const globalAddons = addons.filter(a => a.type === 'global' && a.enabled)
-  const [showProfile, setShowProfile] = useState(false)
+  const { t } = useTranslation();
+  const darkMode = useSettingsStore((s) => s.settings.dark_mode);
+  const dark =
+    darkMode === true ||
+    darkMode === 'dark' ||
+    (darkMode === 'auto' && window.matchMedia('(prefers-color-scheme: dark)').matches);
+  const addons = useAddonStore((s) => s.addons);
+  const globalAddons = addons.filter((a) => a.type === 'global' && a.enabled);
+  const [showProfile, setShowProfile] = useState(false);
 
   const items: { to: string; label: string; icon: LucideIcon }[] = [
     { to: '/trips', label: t('nav.myTrips'), icon: Plane },
-    ...globalAddons.flatMap(addon => {
-      const nav = ADDON_NAV[addon.id]
-      return nav ? [{ to: `/${addon.id}`, label: t(nav.labelKey), icon: nav.icon }] : []
+    ...globalAddons.flatMap((addon) => {
+      const nav = ADDON_NAV[addon.id];
+      return nav ? [{ to: `/${addon.id}`, label: t(nav.labelKey), icon: nav.icon }] : [];
     }),
-  ]
+  ];
 
   return (
     <>
       <nav
-        className="md:hidden sticky bottom-0 border-t border-zinc-200 dark:border-zinc-800 flex justify-around items-start pt-3 z-50 mt-auto flex-shrink-0"
+        className="sticky bottom-0 z-50 mt-auto flex flex-shrink-0 items-start justify-around border-t border-zinc-200 pt-3 dark:border-zinc-800 md:hidden"
         style={{
           height: 'calc(84px + env(safe-area-inset-bottom, 0px))',
           paddingBottom: 'env(safe-area-inset-bottom, 0px)',
@@ -46,7 +49,7 @@ export default function BottomNav() {
             key={to}
             to={to}
             className={({ isActive }) =>
-              `flex flex-col items-center gap-1 px-3 py-1 min-w-[60px] ${
+              `flex min-w-[60px] flex-col items-center gap-1 px-3 py-1 ${
                 isActive ? 'text-zinc-900 dark:text-white' : 'text-zinc-400 dark:text-zinc-500'
               }`
             }
@@ -57,33 +60,33 @@ export default function BottomNav() {
         ))}
         <button
           onClick={() => setShowProfile(true)}
-          className="flex flex-col items-center gap-1 px-3 py-1 min-w-[60px] text-zinc-400 dark:text-zinc-500"
+          className="flex min-w-[60px] flex-col items-center gap-1 px-3 py-1 text-zinc-400 dark:text-zinc-500"
         >
           <User size={22} strokeWidth={2} />
-          <span className="text-[10px] font-medium">{t("nav.profile")}</span>
+          <span className="text-[10px] font-medium">{t('nav.profile')}</span>
         </button>
       </nav>
 
       {showProfile && <ProfileSheet onClose={() => setShowProfile(false)} />}
     </>
-  )
+  );
 }
 
 function ProfileSheet({ onClose }: { onClose: () => void }) {
-  const { t } = useTranslation()
-  const { user, logout } = useAuthStore()
-  const navigate = useNavigate()
+  const { t } = useTranslation();
+  const { user, logout } = useAuthStore();
+  const navigate = useNavigate();
 
   const handleNav = (path: string) => {
-    onClose()
-    navigate(path)
-  }
+    onClose();
+    navigate(path);
+  };
 
   const handleLogout = () => {
-    onClose()
-    logout()
-    navigate('/login')
-  }
+    onClose();
+    logout();
+    navigate('/login');
+  };
 
   return (
     <div className="fixed inset-0 z-[300] md:hidden" onClick={onClose}>
@@ -92,71 +95,71 @@ function ProfileSheet({ onClose }: { onClose: () => void }) {
 
       {/* Sheet */}
       <div
-        className="absolute bottom-0 left-0 right-0 bg-white dark:bg-zinc-900 rounded-t-2xl overflow-hidden"
+        className="absolute bottom-0 left-0 right-0 overflow-hidden rounded-t-2xl bg-white dark:bg-zinc-900"
         style={{ animation: 'slideUp 0.25s ease-out', paddingBottom: 'env(safe-area-inset-bottom, 0px)' }}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         {/* Handle */}
-        <div className="flex justify-center pt-3 pb-2">
-          <div className="w-10 h-1 rounded-full bg-zinc-300 dark:bg-zinc-700" />
+        <div className="flex justify-center pb-2 pt-3">
+          <div className="h-1 w-10 rounded-full bg-zinc-300 dark:bg-zinc-700" />
         </div>
 
         {/* User info */}
         <div className="px-6 pb-4 pt-1">
           <div className="flex items-center gap-3">
-            <div className="w-11 h-11 rounded-full bg-zinc-900 dark:bg-white text-white dark:text-zinc-900 flex items-center justify-center text-[16px] font-bold">
+            <div className="flex h-11 w-11 items-center justify-center rounded-full bg-zinc-900 text-[16px] font-bold text-white dark:bg-white dark:text-zinc-900">
               {(user?.username || '?')[0].toUpperCase()}
             </div>
-            <div className="flex-1 min-w-0">
+            <div className="min-w-0 flex-1">
               <p className="text-[15px] font-semibold text-zinc-900 dark:text-white">{user?.username}</p>
-              <p className="text-[12px] text-zinc-500 truncate">{user?.email}</p>
+              <p className="truncate text-[12px] text-zinc-500">{user?.email}</p>
             </div>
             {user?.role === 'admin' && (
-              <span className="flex items-center gap-1 px-2 py-0.5 rounded-full bg-zinc-100 dark:bg-zinc-800 text-[10px] font-semibold text-zinc-600 dark:text-zinc-400 uppercase tracking-wide">
+              <span className="flex items-center gap-1 rounded-full bg-zinc-100 px-2 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-zinc-600 dark:bg-zinc-800 dark:text-zinc-400">
                 <Shield size={10} /> Admin
               </span>
             )}
           </div>
         </div>
 
-        <div className="h-px bg-zinc-100 dark:bg-zinc-800 mx-4" />
+        <div className="mx-4 h-px bg-zinc-100 dark:bg-zinc-800" />
 
         {/* Links */}
-        <div className="py-2 px-2">
+        <div className="px-2 py-2">
           <button
             onClick={() => handleNav('/settings')}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left hover:bg-zinc-50 dark:hover:bg-zinc-800 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors"
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors hover:bg-zinc-50 active:bg-zinc-100 dark:hover:bg-zinc-800 dark:active:bg-zinc-800"
           >
             <Settings size={18} className="text-zinc-500" />
-            <span className="text-[14px] font-medium text-zinc-900 dark:text-white">{t("nav.bottomSettings")}</span>
+            <span className="text-[14px] font-medium text-zinc-900 dark:text-white">{t('nav.bottomSettings')}</span>
           </button>
 
           {user?.role === 'admin' && (
             <button
               onClick={() => handleNav('/admin')}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left hover:bg-zinc-50 dark:hover:bg-zinc-800 active:bg-zinc-100 dark:active:bg-zinc-800 transition-colors"
+              className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors hover:bg-zinc-50 active:bg-zinc-100 dark:hover:bg-zinc-800 dark:active:bg-zinc-800"
             >
               <Shield size={18} className="text-zinc-500" />
-              <span className="text-[14px] font-medium text-zinc-900 dark:text-white">{t("nav.bottomAdmin")}</span>
+              <span className="text-[14px] font-medium text-zinc-900 dark:text-white">{t('nav.bottomAdmin')}</span>
             </button>
           )}
         </div>
 
-        <div className="h-px bg-zinc-100 dark:bg-zinc-800 mx-4" />
+        <div className="mx-4 h-px bg-zinc-100 dark:bg-zinc-800" />
 
         {/* Logout */}
-        <div className="py-2 px-2">
+        <div className="px-2 py-2">
           <button
             onClick={handleLogout}
-            className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-left hover:bg-red-50 dark:hover:bg-red-900/20 active:bg-red-100 transition-colors"
+            className="flex w-full items-center gap-3 rounded-xl px-4 py-3 text-left transition-colors hover:bg-red-50 active:bg-red-100 dark:hover:bg-red-900/20"
           >
             <LogOut size={18} className="text-red-500" />
-            <span className="text-[14px] font-medium text-red-600 dark:text-red-400">{t("nav.bottomLogout")}</span>
+            <span className="text-[14px] font-medium text-red-600 dark:text-red-400">{t('nav.bottomLogout')}</span>
           </button>
         </div>
 
         <div className="h-4" />
       </div>
     </div>
-  )
+  );
 }

@@ -2,6 +2,18 @@
  * Unit tests for the unified notificationService.send().
  * Covers NSVC-001 to NSVC-014.
  */
+import { runMigrations } from '../../../src/db/migrations';
+import { createTables } from '../../../src/db/schema';
+import { send } from '../../../src/services/notificationService';
+import {
+  createUser,
+  createAdmin,
+  setAppSetting,
+  setNotificationChannels,
+  disableNotificationPref,
+} from '../../helpers/factories';
+import { resetTestDb } from '../../helpers/test-db';
+
 import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
 const { testDb, dbMock } = vi.hoisted(() => {
@@ -53,12 +65,6 @@ vi.mock('../../../src/utils/ssrfGuard', () => ({
   checkSsrf: vi.fn(async () => ({ allowed: true, isPrivate: false, resolvedIp: '1.2.3.4' })),
   createPinnedDispatcher: vi.fn(() => ({})),
 }));
-
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
-import { resetTestDb } from '../../helpers/test-db';
-import { createUser, createAdmin, setAppSetting, setNotificationChannels, disableNotificationPref } from '../../helpers/factories';
-import { send } from '../../../src/services/notificationService';
 
 // ── Helpers ────────────────────────────────────────────────────────────────
 
@@ -124,9 +130,16 @@ describe('send() — multi-channel dispatch', () => {
     setNotificationChannels(testDb, 'email,webhook');
     testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)
+      .lastInsertRowid as number;
 
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) },
+    });
 
     expect(sendMailMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -140,9 +153,16 @@ describe('send() — multi-channel dispatch', () => {
     setUserWebhookUrl(user.id);
     setNotificationChannels(testDb, 'none');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Rome', user.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Rome', user.id)
+      .lastInsertRowid as number;
 
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Rome', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Rome', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) },
+    });
 
     expect(sendMailMock).not.toHaveBeenCalled();
     expect(fetchMock).not.toHaveBeenCalled();
@@ -156,9 +176,16 @@ describe('send() — multi-channel dispatch', () => {
     setNotificationChannels(testDb, 'email');
     testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Berlin', user.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Berlin', user.id)
+      .lastInsertRowid as number;
 
-    await send({ event: 'booking_change', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Berlin', actor: 'Bob', booking: 'Hotel', type: 'hotel', tripId: String(tripId) } });
+    await send({
+      event: 'booking_change',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Berlin', actor: 'Bob', booking: 'Hotel', type: 'hotel', tripId: String(tripId) },
+    });
 
     expect(sendMailMock).toHaveBeenCalledTimes(1);
     expect(fetchMock).not.toHaveBeenCalled();
@@ -177,9 +204,16 @@ describe('send() — per-user preference filtering', () => {
     testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
     disableNotificationPref(testDb, user.id, 'trip_invite', 'email');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)
+      .lastInsertRowid as number;
 
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) },
+    });
 
     expect(sendMailMock).not.toHaveBeenCalled();
     // in-app still fires
@@ -191,9 +225,16 @@ describe('send() — per-user preference filtering', () => {
     setNotificationChannels(testDb, 'none');
     disableNotificationPref(testDb, user.id, 'collab_message', 'inapp');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)
+      .lastInsertRowid as number;
 
-    await send({ event: 'collab_message', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', actor: 'Alice', tripId: String(tripId) } });
+    await send({
+      event: 'collab_message',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Trip', actor: 'Alice', tripId: String(tripId) },
+    });
 
     expect(broadcastMock).not.toHaveBeenCalled();
     expect(countAllNotifications()).toBe(0);
@@ -207,9 +248,16 @@ describe('send() — per-user preference filtering', () => {
     testDb.prepare('UPDATE users SET email = ? WHERE id = ?').run('recipient@test.com', user.id);
     disableNotificationPref(testDb, user.id, 'trip_invite', 'email');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)
+      .lastInsertRowid as number;
 
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) },
+    });
 
     expect(sendMailMock).not.toHaveBeenCalled();
     expect(fetchMock).toHaveBeenCalledTimes(1);
@@ -228,16 +276,25 @@ describe('send() — recipient resolution', () => {
     const { user: actor } = createUser(testDb);
     setNotificationChannels(testDb, 'none');
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', owner.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', owner.id)
+      .lastInsertRowid as number;
     testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, member1.id);
     testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, member2.id);
     testDb.prepare('INSERT INTO trip_members (trip_id, user_id) VALUES (?, ?)').run(tripId, actor.id);
 
-    await send({ event: 'booking_change', actorId: actor.id, scope: 'trip', targetId: tripId, params: { trip: 'Trip', actor: 'Actor', booking: 'Hotel', type: 'hotel', tripId: String(tripId) } });
+    await send({
+      event: 'booking_change',
+      actorId: actor.id,
+      scope: 'trip',
+      targetId: tripId,
+      params: { trip: 'Trip', actor: 'Actor', booking: 'Hotel', type: 'hotel', tripId: String(tripId) },
+    });
 
     // Owner, member1, member2 get it; actor is excluded
     expect(countAllNotifications()).toBe(3);
-    const recipients = (testDb.prepare('SELECT recipient_id FROM notifications ORDER BY recipient_id').all() as { recipient_id: number }[]).map(r => r.recipient_id);
+    const recipients = (
+      testDb.prepare('SELECT recipient_id FROM notifications ORDER BY recipient_id').all() as { recipient_id: number }[]
+    ).map((r) => r.recipient_id);
     expect(recipients).toContain(owner.id);
     expect(recipients).toContain(member1.id);
     expect(recipients).toContain(member2.id);
@@ -249,7 +306,13 @@ describe('send() — recipient resolution', () => {
     const { user: other } = createUser(testDb);
     setNotificationChannels(testDb, 'none');
 
-    await send({ event: 'vacay_invite', actorId: other.id, scope: 'user', targetId: target.id, params: { actor: 'other@test.com', planId: '42' } });
+    await send({
+      event: 'vacay_invite',
+      actorId: other.id,
+      scope: 'user',
+      targetId: target.id,
+      params: { actor: 'other@test.com', planId: '42' },
+    });
 
     expect(countAllNotifications()).toBe(1);
     const notif = testDb.prepare('SELECT recipient_id FROM notifications LIMIT 1').get() as { recipient_id: number };
@@ -262,10 +325,18 @@ describe('send() — recipient resolution', () => {
     createUser(testDb); // regular user — should NOT receive
     setNotificationChannels(testDb, 'none');
 
-    await send({ event: 'version_available', actorId: null, scope: 'admin', targetId: 0, params: { version: '2.0.0' } });
+    await send({
+      event: 'version_available',
+      actorId: null,
+      scope: 'admin',
+      targetId: 0,
+      params: { version: '2.0.0' },
+    });
 
     expect(countAllNotifications()).toBe(2);
-    const recipients = (testDb.prepare('SELECT recipient_id FROM notifications ORDER BY recipient_id').all() as { recipient_id: number }[]).map(r => r.recipient_id);
+    const recipients = (
+      testDb.prepare('SELECT recipient_id FROM notifications ORDER BY recipient_id').all() as { recipient_id: number }[]
+    ).map((r) => r.recipient_id);
     expect(recipients).toContain(admin1.id);
     expect(recipients).toContain(admin2.id);
   });
@@ -275,10 +346,16 @@ describe('send() — recipient resolution', () => {
     setAdminWebhookUrl();
     setNotificationChannels(testDb, 'none');
 
-    await send({ event: 'version_available', actorId: null, scope: 'admin', targetId: 0, params: { version: '2.0.0' } });
+    await send({
+      event: 'version_available',
+      actorId: null,
+      scope: 'admin',
+      targetId: 0,
+      params: { version: '2.0.0' },
+    });
 
     // Wait for fire-and-forget admin webhook
-    await new Promise(r => setTimeout(r, 10));
+    await new Promise((r) => setTimeout(r, 10));
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const callUrl = fetchMock.mock.calls[0][0];
     expect(callUrl).toBe('https://hooks.test.com/admin-webhook');
@@ -288,9 +365,16 @@ describe('send() — recipient resolution', () => {
     // Trip with no members, sending as the trip owner (actor excluded from trip scope)
     const { user: owner } = createUser(testDb);
     setNotificationChannels(testDb, 'none');
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Solo', owner.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Solo', owner.id)
+      .lastInsertRowid as number;
 
-    await send({ event: 'booking_change', actorId: owner.id, scope: 'trip', targetId: tripId, params: { trip: 'Solo', actor: 'owner@test.com', booking: 'Hotel', type: 'hotel', tripId: String(tripId) } });
+    await send({
+      event: 'booking_change',
+      actorId: owner.id,
+      scope: 'trip',
+      targetId: tripId,
+      params: { trip: 'Solo', actor: 'owner@test.com', booking: 'Hotel', type: 'hotel', tripId: String(tripId) },
+    });
 
     expect(countAllNotifications()).toBe(0);
     expect(broadcastMock).not.toHaveBeenCalled();
@@ -306,7 +390,13 @@ describe('send() — in-app notification content', () => {
     const { user } = createUser(testDb);
     setNotificationChannels(testDb, 'none');
 
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: '42' } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: '42' },
+    });
 
     const notifs = getInAppNotifications(user.id);
     expect(notifs.length).toBe(1);
@@ -334,7 +424,13 @@ describe('send() — in-app notification content', () => {
     const { user: admin } = createAdmin(testDb);
     setNotificationChannels(testDb, 'none');
 
-    await send({ event: 'version_available', actorId: null, scope: 'admin', targetId: 0, params: { version: '9.9.9' } });
+    await send({
+      event: 'version_available',
+      actorId: null,
+      scope: 'admin',
+      targetId: 0,
+      params: { version: '9.9.9' },
+    });
 
     const notifs = getInAppNotifications(admin.id);
     expect(notifs.length).toBe(1);
@@ -356,9 +452,16 @@ describe('send() — email/webhook links', () => {
     // Set user language to French
     testDb.prepare("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'language', 'fr')").run(user.id);
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Paris', user.id)
+      .lastInsertRowid as number;
 
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) },
+    });
 
     expect(sendMailMock).toHaveBeenCalledTimes(1);
     const mailArgs = sendMailMock.mock.calls[0][0];
@@ -371,7 +474,13 @@ describe('send() — email/webhook links', () => {
     setUserWebhookUrl(user.id, 'https://hooks.test.com/generic-webhook');
     setNotificationChannels(testDb, 'webhook');
 
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: '55' } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: '55' },
+    });
 
     expect(fetchMock).toHaveBeenCalledTimes(1);
     const body = JSON.parse(fetchMock.mock.calls[0][1].body);
@@ -428,9 +537,16 @@ describe('send() — channel failure resilience', () => {
     // Make email throw
     sendMailMock.mockRejectedValueOnce(new Error('SMTP connection refused'));
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)
+      .lastInsertRowid as number;
 
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Trip', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) },
+    });
 
     // In-app and webhook still fire despite email failure
     expect(broadcastMock).toHaveBeenCalledTimes(1);
@@ -448,9 +564,16 @@ describe('send() — channel failure resilience', () => {
     // Make webhook throw
     fetchMock.mockRejectedValueOnce(new Error('Network error'));
 
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Trip', user.id)
+      .lastInsertRowid as number;
 
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Trip', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Trip', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) },
+    });
 
     // In-app and email still fire despite webhook failure
     expect(broadcastMock).toHaveBeenCalledTimes(1);
@@ -462,7 +585,9 @@ describe('send() — channel failure resilience', () => {
 // ── Ntfy dispatch ─────────────────────────────────────────────────────────────
 
 function setUserNtfyTopic(userId: number, topic = 'my-trek-topic'): void {
-  testDb.prepare("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'ntfy_topic', ?)").run(userId, topic);
+  testDb
+    .prepare("INSERT OR REPLACE INTO settings (user_id, key, value) VALUES (?, 'ntfy_topic', ?)")
+    .run(userId, topic);
 }
 
 function setAdminNtfyTopic(topic = 'trek-admin-alerts'): void {
@@ -478,9 +603,16 @@ describe('send() — ntfy channel dispatch', () => {
     const { user } = createUser(testDb);
     setUserNtfyTopic(user.id);
     setNotificationChannels(testDb, 'ntfy');
-    const tripId = (testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Tokyo', user.id)).lastInsertRowid as number;
+    const tripId = testDb.prepare('INSERT INTO trips (title, user_id) VALUES (?, ?)').run('Tokyo', user.id)
+      .lastInsertRowid as number;
 
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Tokyo', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Tokyo', actor: 'Alice', invitee: 'Bob', tripId: String(tripId) },
+    });
 
     const ntfyCalls = fetchMock.mock.calls.filter(([url]: [string]) => url.includes('ntfy.sh'));
     expect(ntfyCalls.length).toBeGreaterThan(0);
@@ -495,7 +627,13 @@ describe('send() — ntfy channel dispatch', () => {
     setNotificationChannels(testDb, 'none');
 
     fetchMock.mockClear();
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: '1' } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Paris', actor: 'Alice', invitee: 'Bob', tripId: '1' },
+    });
 
     const ntfyCalls = fetchMock.mock.calls.filter(([url]: [string]) => url.includes('ntfy.sh'));
     expect(ntfyCalls.length).toBe(0);
@@ -507,7 +645,13 @@ describe('send() — ntfy channel dispatch', () => {
     // No ntfy_topic set, but no admin_ntfy_server either — resolveNtfyUrl returns null
 
     fetchMock.mockClear();
-    await send({ event: 'trip_invite', actorId: null, scope: 'user', targetId: user.id, params: { trip: 'Rome', actor: 'Alice', invitee: 'Bob', tripId: '1' } });
+    await send({
+      event: 'trip_invite',
+      actorId: null,
+      scope: 'user',
+      targetId: user.id,
+      params: { trip: 'Rome', actor: 'Alice', invitee: 'Bob', tripId: '1' },
+    });
 
     const ntfyCalls = fetchMock.mock.calls.filter(([url]: [string]) => url.includes('ntfy.sh'));
     expect(ntfyCalls.length).toBe(0);
@@ -519,7 +663,13 @@ describe('send() — ntfy channel dispatch', () => {
     setNotificationChannels(testDb, 'none');
 
     fetchMock.mockClear();
-    await send({ event: 'version_available', actorId: null, scope: 'admin', targetId: 0, params: { version: '3.0.0' } });
+    await send({
+      event: 'version_available',
+      actorId: null,
+      scope: 'admin',
+      targetId: 0,
+      params: { version: '3.0.0' },
+    });
 
     const ntfyCalls = fetchMock.mock.calls.filter(([url]: [string]) => url.includes('ntfy.sh'));
     expect(ntfyCalls.length).toBeGreaterThan(0);

@@ -1,4 +1,3 @@
-
 // ── Interfaces ──────────────────────────────────────────────────────────
 
 export interface WeatherResult {
@@ -56,40 +55,96 @@ interface OpenMeteoForecast {
 // ── WMO code mappings ───────────────────────────────────────────────────
 
 const WMO_MAP: Record<number, string> = {
-  0: 'Clear', 1: 'Clear', 2: 'Clouds', 3: 'Clouds',
-  45: 'Fog', 48: 'Fog',
-  51: 'Drizzle', 53: 'Drizzle', 55: 'Drizzle', 56: 'Drizzle', 57: 'Drizzle',
-  61: 'Rain', 63: 'Rain', 65: 'Rain', 66: 'Rain', 67: 'Rain',
-  71: 'Snow', 73: 'Snow', 75: 'Snow', 77: 'Snow',
-  80: 'Rain', 81: 'Rain', 82: 'Rain',
-  85: 'Snow', 86: 'Snow',
-  95: 'Thunderstorm', 96: 'Thunderstorm', 99: 'Thunderstorm',
+  0: 'Clear',
+  1: 'Clear',
+  2: 'Clouds',
+  3: 'Clouds',
+  45: 'Fog',
+  48: 'Fog',
+  51: 'Drizzle',
+  53: 'Drizzle',
+  55: 'Drizzle',
+  56: 'Drizzle',
+  57: 'Drizzle',
+  61: 'Rain',
+  63: 'Rain',
+  65: 'Rain',
+  66: 'Rain',
+  67: 'Rain',
+  71: 'Snow',
+  73: 'Snow',
+  75: 'Snow',
+  77: 'Snow',
+  80: 'Rain',
+  81: 'Rain',
+  82: 'Rain',
+  85: 'Snow',
+  86: 'Snow',
+  95: 'Thunderstorm',
+  96: 'Thunderstorm',
+  99: 'Thunderstorm',
 };
 
 const WMO_DESCRIPTION_DE: Record<number, string> = {
-  0: 'Klar', 1: 'Uberwiegend klar', 2: 'Teilweise bewolkt', 3: 'Bewolkt',
-  45: 'Nebel', 48: 'Nebel mit Reif',
-  51: 'Leichter Nieselregen', 53: 'Nieselregen', 55: 'Starker Nieselregen',
-  56: 'Gefrierender Nieselregen', 57: 'Starker gefr. Nieselregen',
-  61: 'Leichter Regen', 63: 'Regen', 65: 'Starker Regen',
-  66: 'Gefrierender Regen', 67: 'Starker gefr. Regen',
-  71: 'Leichter Schneefall', 73: 'Schneefall', 75: 'Starker Schneefall', 77: 'Schneekorner',
-  80: 'Leichte Regenschauer', 81: 'Regenschauer', 82: 'Starke Regenschauer',
-  85: 'Leichte Schneeschauer', 86: 'Starke Schneeschauer',
-  95: 'Gewitter', 96: 'Gewitter mit Hagel', 99: 'Starkes Gewitter mit Hagel',
+  0: 'Klar',
+  1: 'Uberwiegend klar',
+  2: 'Teilweise bewolkt',
+  3: 'Bewolkt',
+  45: 'Nebel',
+  48: 'Nebel mit Reif',
+  51: 'Leichter Nieselregen',
+  53: 'Nieselregen',
+  55: 'Starker Nieselregen',
+  56: 'Gefrierender Nieselregen',
+  57: 'Starker gefr. Nieselregen',
+  61: 'Leichter Regen',
+  63: 'Regen',
+  65: 'Starker Regen',
+  66: 'Gefrierender Regen',
+  67: 'Starker gefr. Regen',
+  71: 'Leichter Schneefall',
+  73: 'Schneefall',
+  75: 'Starker Schneefall',
+  77: 'Schneekorner',
+  80: 'Leichte Regenschauer',
+  81: 'Regenschauer',
+  82: 'Starke Regenschauer',
+  85: 'Leichte Schneeschauer',
+  86: 'Starke Schneeschauer',
+  95: 'Gewitter',
+  96: 'Gewitter mit Hagel',
+  99: 'Starkes Gewitter mit Hagel',
 };
 
 const WMO_DESCRIPTION_EN: Record<number, string> = {
-  0: 'Clear sky', 1: 'Mainly clear', 2: 'Partly cloudy', 3: 'Overcast',
-  45: 'Fog', 48: 'Rime fog',
-  51: 'Light drizzle', 53: 'Drizzle', 55: 'Heavy drizzle',
-  56: 'Freezing drizzle', 57: 'Heavy freezing drizzle',
-  61: 'Light rain', 63: 'Rain', 65: 'Heavy rain',
-  66: 'Freezing rain', 67: 'Heavy freezing rain',
-  71: 'Light snowfall', 73: 'Snowfall', 75: 'Heavy snowfall', 77: 'Snow grains',
-  80: 'Light rain showers', 81: 'Rain showers', 82: 'Heavy rain showers',
-  85: 'Light snow showers', 86: 'Heavy snow showers',
-  95: 'Thunderstorm', 96: 'Thunderstorm with hail', 99: 'Severe thunderstorm with hail',
+  0: 'Clear sky',
+  1: 'Mainly clear',
+  2: 'Partly cloudy',
+  3: 'Overcast',
+  45: 'Fog',
+  48: 'Rime fog',
+  51: 'Light drizzle',
+  53: 'Drizzle',
+  55: 'Heavy drizzle',
+  56: 'Freezing drizzle',
+  57: 'Heavy freezing drizzle',
+  61: 'Light rain',
+  63: 'Rain',
+  65: 'Heavy rain',
+  66: 'Freezing rain',
+  67: 'Heavy freezing rain',
+  71: 'Light snowfall',
+  73: 'Snowfall',
+  75: 'Heavy snowfall',
+  77: 'Snow grains',
+  80: 'Light rain showers',
+  81: 'Rain showers',
+  82: 'Heavy rain showers',
+  85: 'Light snow showers',
+  86: 'Heavy snow showers',
+  95: 'Thunderstorm',
+  96: 'Thunderstorm with hail',
+  99: 'Severe thunderstorm with hail',
 };
 
 // ── Cache management ────────────────────────────────────────────────────
@@ -112,9 +167,9 @@ setInterval(() => {
   }
 }, CACHE_CLEANUP_INTERVAL);
 
-const TTL_FORECAST_MS = 60 * 60 * 1000;      // 1 hour
-const TTL_CURRENT_MS  = 15 * 60 * 1000;      // 15 minutes
-const TTL_CLIMATE_MS  = 24 * 60 * 60 * 1000; // 24 hours
+const TTL_FORECAST_MS = 60 * 60 * 1000; // 1 hour
+const TTL_CURRENT_MS = 15 * 60 * 1000; // 15 minutes
+const TTL_CLIMATE_MS = 24 * 60 * 60 * 1000; // 24 hours
 
 export function cacheKey(lat: string, lng: string, date?: string): string {
   const rlat = parseFloat(lat).toFixed(2);
@@ -167,7 +222,7 @@ async function _getWeatherImpl(
     if (diffDays >= -1 && diffDays <= 16) {
       const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,weathercode&timezone=auto&forecast_days=16`;
       const response = await fetch(url);
-      const data = await response.json() as OpenMeteoForecast;
+      const data = (await response.json()) as OpenMeteoForecast;
 
       if (!response.ok || data.error) {
         throw new ApiError(response.status || 500, data.reason || 'Open-Meteo API error');
@@ -177,13 +232,13 @@ async function _getWeatherImpl(
       const idx = (data.daily?.time || []).indexOf(dateStr);
 
       if (idx !== -1) {
-        const code = data.daily!.weathercode[idx];
+        const code = data.daily.weathercode[idx];
         const descriptions = lang === 'de' ? WMO_DESCRIPTION_DE : WMO_DESCRIPTION_EN;
 
         const result: WeatherResult = {
-          temp: Math.round((data.daily!.temperature_2m_max[idx] + data.daily!.temperature_2m_min[idx]) / 2),
-          temp_max: Math.round(data.daily!.temperature_2m_max[idx]),
-          temp_min: Math.round(data.daily!.temperature_2m_min[idx]),
+          temp: Math.round((data.daily.temperature_2m_max[idx] + data.daily.temperature_2m_min[idx]) / 2),
+          temp_max: Math.round(data.daily.temperature_2m_max[idx]),
+          temp_min: Math.round(data.daily.temperature_2m_min[idx]),
           main: WMO_MAP[code] || 'Clouds',
           description: descriptions[code] || '',
           type: 'forecast',
@@ -199,7 +254,7 @@ async function _getWeatherImpl(
       const dateStr = targetDate.toISOString().slice(0, 10);
       const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${dateStr}&end_date=${dateStr}&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum&timezone=auto`;
       const response = await fetch(url);
-      const data = await response.json() as OpenMeteoForecast;
+      const data = (await response.json()) as OpenMeteoForecast;
 
       if (!response.ok || data.error) {
         throw new ApiError(response.status || 500, data.reason || 'Open-Meteo Archive API error');
@@ -215,8 +270,8 @@ async function _getWeatherImpl(
           temp: Math.round((tMax + tMin) / 2),
           temp_max: Math.round(tMax),
           temp_min: Math.round(tMin),
-          main: WMO_MAP[code!] || estimateCondition((tMax + tMin) / 2, daily.precipitation_sum?.[0] || 0),
-          description: descriptions[code!] || '',
+          main: WMO_MAP[code] || estimateCondition((tMax + tMin) / 2, daily.precipitation_sum?.[0] || 0),
+          description: descriptions[code] || '',
           type: 'forecast',
         };
         setCache(ck, result, TTL_CLIMATE_MS);
@@ -240,7 +295,7 @@ async function _getWeatherImpl(
 
       const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}&start_date=${startStr}&end_date=${endStr}&daily=temperature_2m_max,temperature_2m_min,precipitation_sum&timezone=auto`;
       const response = await fetch(url);
-      const data = await response.json() as OpenMeteoForecast;
+      const data = (await response.json()) as OpenMeteoForecast;
 
       if (!response.ok || data.error) {
         throw new ApiError(response.status || 500, data.reason || 'Open-Meteo Climate API error');
@@ -251,12 +306,15 @@ async function _getWeatherImpl(
         return { temp: 0, main: '', description: '', type: '', error: 'no_forecast' };
       }
 
-      let sumMax = 0, sumMin = 0, sumPrecip = 0, count = 0;
+      let sumMax = 0,
+        sumMin = 0,
+        sumPrecip = 0,
+        count = 0;
       for (let i = 0; i < daily.time.length; i++) {
         if (daily.temperature_2m_max[i] != null && daily.temperature_2m_min[i] != null) {
           sumMax += daily.temperature_2m_max[i];
           sumMin += daily.temperature_2m_min[i];
-          sumPrecip += daily.precipitation_sum![i] || 0;
+          sumPrecip += daily.precipitation_sum[i] || 0;
           count++;
         }
       }
@@ -293,17 +351,17 @@ async function _getWeatherImpl(
 
   const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&current=temperature_2m,weathercode&timezone=auto`;
   const response = await fetch(url);
-  const data = await response.json() as OpenMeteoForecast;
+  const data = (await response.json()) as OpenMeteoForecast;
 
   if (!response.ok || data.error) {
     throw new ApiError(response.status || 500, data.reason || 'Open-Meteo API error');
   }
 
-  const code = data.current!.weathercode;
+  const code = data.current.weathercode;
   const descriptions = lang === 'de' ? WMO_DESCRIPTION_DE : WMO_DESCRIPTION_EN;
 
   const result: WeatherResult = {
-    temp: Math.round(data.current!.temperature_2m),
+    temp: Math.round(data.current.temperature_2m),
     main: WMO_MAP[code] || 'Clouds',
     description: descriptions[code] || '',
     type: 'current',
@@ -328,17 +386,16 @@ export async function getWeather(
   if (existing) return existing;
   const promise = _getWeatherImpl(lat, lng, date, lang);
   inFlight.set(inFlightKey, promise);
-  try { return await promise; } finally { inFlight.delete(inFlightKey); }
+  try {
+    return await promise;
+  } finally {
+    inFlight.delete(inFlightKey);
+  }
 }
 
 // ── getDetailedWeather ──────────────────────────────────────────────────
 
-async function _getDetailedWeatherImpl(
-  lat: string,
-  lng: string,
-  date: string,
-  lang: string,
-): Promise<WeatherResult> {
+async function _getDetailedWeatherImpl(lat: string, lng: string, date: string, lang: string): Promise<WeatherResult> {
   const ck = `detailed_${cacheKey(lat, lng, date)}`;
 
   const cached = getCached(ck);
@@ -358,13 +415,14 @@ async function _getDetailedWeatherImpl(
     if (new Date(refYear, targetDate.getMonth(), targetDate.getDate()) > yesterday) refYear--;
     const refDateStr = `${refYear}-${String(targetDate.getMonth() + 1).padStart(2, '0')}-${String(targetDate.getDate()).padStart(2, '0')}`;
 
-    const url = `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}`
-      + `&start_date=${refDateStr}&end_date=${refDateStr}`
-      + `&hourly=temperature_2m,precipitation,weathercode,windspeed_10m,relativehumidity_2m`
-      + `&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum,windspeed_10m_max,sunrise,sunset`
-      + `&timezone=auto`;
+    const url =
+      `https://archive-api.open-meteo.com/v1/archive?latitude=${lat}&longitude=${lng}` +
+      `&start_date=${refDateStr}&end_date=${refDateStr}` +
+      `&hourly=temperature_2m,precipitation,weathercode,windspeed_10m,relativehumidity_2m` +
+      `&daily=temperature_2m_max,temperature_2m_min,weathercode,precipitation_sum,windspeed_10m_max,sunrise,sunset` +
+      `&timezone=auto`;
     const response = await fetch(url);
-    const data = await response.json() as OpenMeteoForecast;
+    const data = (await response.json()) as OpenMeteoForecast;
 
     if (!response.ok || data.error) {
       throw new ApiError(response.status || 500, data.reason || 'Open-Meteo Climate API error');
@@ -391,14 +449,15 @@ async function _getDetailedWeatherImpl(
           temp: Math.round(hourly.temperature_2m[i]),
           precipitation: hourly.precipitation?.[i] || 0,
           precipitation_probability: 0,
-          main: WMO_MAP[hCode!] || 'Clouds',
+          main: WMO_MAP[hCode] || 'Clouds',
           wind: Math.round(hourly.windspeed_10m?.[i] || 0),
           humidity: hourly.relativehumidity_2m?.[i] || 0,
         });
       }
     }
 
-    let sunrise: string | null = null, sunset: string | null = null;
+    let sunrise: string | null = null,
+      sunset: string | null = null;
     if (daily.sunrise?.[idx]) sunrise = daily.sunrise[idx].split('T')[1]?.slice(0, 5);
     if (daily.sunset?.[idx]) sunset = daily.sunset[idx].split('T')[1]?.slice(0, 5);
 
@@ -407,8 +466,8 @@ async function _getDetailedWeatherImpl(
       temp: Math.round((avgMax + avgMin) / 2),
       temp_max: Math.round(avgMax),
       temp_min: Math.round(avgMin),
-      main: WMO_MAP[code!] || estimateCondition((avgMax + avgMin) / 2, daily.precipitation_sum?.[idx] || 0),
-      description: descriptions[code!] || '',
+      main: WMO_MAP[code] || estimateCondition((avgMax + avgMin) / 2, daily.precipitation_sum?.[idx] || 0),
+      description: descriptions[code] || '',
       precipitation_sum: Math.round((daily.precipitation_sum?.[idx] || 0) * 10) / 10,
       wind_max: Math.round(daily.windspeed_10m_max?.[idx] || 0),
       sunrise,
@@ -421,13 +480,14 @@ async function _getDetailedWeatherImpl(
   }
 
   // Forecast path (<= 16 days)
-  const url = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}`
-    + `&hourly=temperature_2m,precipitation_probability,precipitation,weathercode,windspeed_10m,relativehumidity_2m`
-    + `&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset,precipitation_probability_max,precipitation_sum,windspeed_10m_max`
-    + `&timezone=auto&start_date=${dateStr}&end_date=${dateStr}`;
+  const url =
+    `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}` +
+    `&hourly=temperature_2m,precipitation_probability,precipitation,weathercode,windspeed_10m,relativehumidity_2m` +
+    `&daily=temperature_2m_max,temperature_2m_min,weathercode,sunrise,sunset,precipitation_probability_max,precipitation_sum,windspeed_10m_max` +
+    `&timezone=auto&start_date=${dateStr}&end_date=${dateStr}`;
 
   const response = await fetch(url);
-  const data = await response.json() as OpenMeteoForecast;
+  const data = (await response.json()) as OpenMeteoForecast;
 
   if (!response.ok || data.error) {
     throw new ApiError(response.status || 500, data.reason || 'Open-Meteo API error');
@@ -456,11 +516,11 @@ async function _getDetailedWeatherImpl(
       hourlyData.push({
         hour: h,
         temp: Math.round(hourly.temperature_2m[i]),
-        precipitation_probability: hourly.precipitation_probability![i] || 0,
-        precipitation: hourly.precipitation![i] || 0,
-        main: WMO_MAP[hourly.weathercode![i]] || 'Clouds',
-        wind: Math.round(hourly.windspeed_10m![i] || 0),
-        humidity: Math.round(hourly.relativehumidity_2m![i] || 0),
+        precipitation_probability: hourly.precipitation_probability[i] || 0,
+        precipitation: hourly.precipitation[i] || 0,
+        main: WMO_MAP[hourly.weathercode[i]] || 'Clouds',
+        wind: Math.round(hourly.windspeed_10m[i] || 0),
+        humidity: Math.round(hourly.relativehumidity_2m[i] || 0),
       });
     }
   }
@@ -472,11 +532,11 @@ async function _getDetailedWeatherImpl(
     temp_min: Math.round(daily.temperature_2m_min[dayIdx]),
     main: WMO_MAP[code] || 'Clouds',
     description: descriptions[code] || '',
-    sunrise: formatTime(daily.sunrise![dayIdx]),
-    sunset: formatTime(daily.sunset![dayIdx]),
-    precipitation_sum: daily.precipitation_sum![dayIdx] || 0,
-    precipitation_probability_max: daily.precipitation_probability_max![dayIdx] || 0,
-    wind_max: Math.round(daily.windspeed_10m_max![dayIdx] || 0),
+    sunrise: formatTime(daily.sunrise[dayIdx]),
+    sunset: formatTime(daily.sunset[dayIdx]),
+    precipitation_sum: daily.precipitation_sum[dayIdx] || 0,
+    precipitation_probability_max: daily.precipitation_probability_max[dayIdx] || 0,
+    wind_max: Math.round(daily.windspeed_10m_max[dayIdx] || 0),
     hourly: hourlyData,
   };
 
@@ -484,12 +544,7 @@ async function _getDetailedWeatherImpl(
   return result;
 }
 
-export async function getDetailedWeather(
-  lat: string,
-  lng: string,
-  date: string,
-  lang: string,
-): Promise<WeatherResult> {
+export async function getDetailedWeather(lat: string, lng: string, date: string, lang: string): Promise<WeatherResult> {
   const ck = `detailed_${cacheKey(lat, lng, date)}`;
   const cached = getCached(ck);
   if (cached) return cached;
@@ -499,7 +554,11 @@ export async function getDetailedWeather(
   if (existing) return existing;
   const promise = _getDetailedWeatherImpl(lat, lng, date, lang);
   inFlight.set(inFlightKey, promise);
-  try { return await promise; } finally { inFlight.delete(inFlightKey); }
+  try {
+    return await promise;
+  } finally {
+    inFlight.delete(inFlightKey);
+  }
 }
 
 // ── ApiError ────────────────────────────────────────────────────────────

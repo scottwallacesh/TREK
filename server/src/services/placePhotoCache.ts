@@ -1,8 +1,9 @@
-import path from 'node:path';
+import { db } from '../db/database';
+
+import crypto from 'node:crypto';
 import fs from 'node:fs';
 import fsPromises from 'node:fs/promises';
-import crypto from 'node:crypto';
-import { db } from '../db/database';
+import path from 'node:path';
 
 const GOOGLE_PHOTO_DIR = path.join(__dirname, '../../uploads/photos/google');
 const ERROR_TTL = 5 * 60 * 1000;
@@ -17,7 +18,9 @@ const knownOnDisk = new Set<string>();
 // Ensure upload dir exists once at startup — avoids sync FS calls inside put() on every write.
 try {
   fs.mkdirSync(GOOGLE_PHOTO_DIR, { recursive: true });
-} catch { /* already exists */ }
+} catch {
+  /* already exists */
+}
 
 function filePath(placeId: string): string {
   // Hash to avoid filename collisions — coords:lat:lng pseudo-IDs contain characters that
@@ -37,9 +40,9 @@ interface CachedPhoto {
 }
 
 export function get(placeId: string): CachedPhoto | null {
-  const row = db.prepare(
-    'SELECT attribution FROM google_place_photo_meta WHERE place_id = ? AND error_at IS NULL'
-  ).get(placeId) as { attribution: string | null } | undefined;
+  const row = db
+    .prepare('SELECT attribution FROM google_place_photo_meta WHERE place_id = ? AND error_at IS NULL')
+    .get(placeId) as { attribution: string | null } | undefined;
 
   if (!row) return null;
 
@@ -59,9 +62,9 @@ export function get(placeId: string): CachedPhoto | null {
 }
 
 export function getErrored(placeId: string): boolean {
-  const row = db.prepare(
-    'SELECT error_at FROM google_place_photo_meta WHERE place_id = ? AND error_at IS NOT NULL'
-  ).get(placeId) as { error_at: number } | undefined;
+  const row = db
+    .prepare('SELECT error_at FROM google_place_photo_meta WHERE place_id = ? AND error_at IS NOT NULL')
+    .get(placeId) as { error_at: number } | undefined;
 
   if (!row) return false;
   return Date.now() - row.error_at < ERROR_TTL;
@@ -70,7 +73,7 @@ export function getErrored(placeId: string): boolean {
 export function markError(placeId: string): void {
   knownOnDisk.delete(placeId);
   db.prepare(
-    'INSERT OR REPLACE INTO google_place_photo_meta (place_id, attribution, fetched_at, error_at) VALUES (?, NULL, ?, ?)'
+    'INSERT OR REPLACE INTO google_place_photo_meta (place_id, attribution, fetched_at, error_at) VALUES (?, NULL, ?, ?)',
   ).run(placeId, Date.now(), Date.now());
 }
 
@@ -84,21 +87,28 @@ export async function put(placeId: string, bytes: Buffer, attribution: string | 
   knownOnDisk.add(placeId);
 
   db.prepare(
-    'INSERT OR REPLACE INTO google_place_photo_meta (place_id, attribution, fetched_at, error_at) VALUES (?, ?, ?, NULL)'
+    'INSERT OR REPLACE INTO google_place_photo_meta (place_id, attribution, fetched_at, error_at) VALUES (?, ?, ?, NULL)',
   ).run(placeId, attribution, Date.now());
 
   return { photoUrl: proxyUrl(placeId), filePath: fp, attribution };
 }
 
-export function getInFlight(placeId: string): Promise<{ filePath: string; attribution: string | null } | null> | undefined {
+export function getInFlight(
+  placeId: string,
+): Promise<{ filePath: string; attribution: string | null } | null> | undefined {
   return inFlight.get(placeId);
 }
 
-export function setInFlight(placeId: string, promise: Promise<{ filePath: string; attribution: string | null } | null>): void {
+export function setInFlight(
+  placeId: string,
+  promise: Promise<{ filePath: string; attribution: string | null } | null>,
+): void {
   inFlight.set(placeId, promise);
   promise
     .finally(() => inFlight.delete(placeId))
-    .catch(() => { /* awaiter logs; this .catch only prevents unhandledRejection */ });
+    .catch(() => {
+      /* awaiter logs; this .catch only prevents unhandledRejection */
+    });
 }
 
 export function serveFilePath(placeId: string): string | null {

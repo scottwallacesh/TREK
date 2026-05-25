@@ -27,14 +27,14 @@ export interface AvailableChannels {
 // Which channels are implemented for each event type.
 // Only implemented combos show toggles in the user preferences UI.
 const IMPLEMENTED_COMBOS: Record<NotifEventType, NotifChannel[]> = {
-  trip_invite:       ['inapp', 'email', 'webhook', 'ntfy'],
-  booking_change:    ['inapp', 'email', 'webhook', 'ntfy'],
-  trip_reminder:     ['inapp', 'email', 'webhook', 'ntfy'],
-  todo_due:          ['inapp', 'email', 'webhook', 'ntfy'],
-  vacay_invite:      ['inapp', 'email', 'webhook', 'ntfy'],
-  photos_shared:     ['inapp', 'email', 'webhook', 'ntfy'],
-  collab_message:    ['inapp', 'email', 'webhook', 'ntfy'],
-  packing_tagged:    ['inapp', 'email', 'webhook', 'ntfy'],
+  trip_invite: ['inapp', 'email', 'webhook', 'ntfy'],
+  booking_change: ['inapp', 'email', 'webhook', 'ntfy'],
+  trip_reminder: ['inapp', 'email', 'webhook', 'ntfy'],
+  todo_due: ['inapp', 'email', 'webhook', 'ntfy'],
+  vacay_invite: ['inapp', 'email', 'webhook', 'ntfy'],
+  photos_shared: ['inapp', 'email', 'webhook', 'ntfy'],
+  collab_message: ['inapp', 'email', 'webhook', 'ntfy'],
+  packing_tagged: ['inapp', 'email', 'webhook', 'ntfy'],
   version_available: ['inapp', 'email', 'webhook', 'ntfy'],
   synology_session_cleared: ['inapp'],
 };
@@ -45,7 +45,10 @@ export const ADMIN_SCOPED_EVENTS = new Set<NotifEventType>(['version_available']
 // ── Helpers ────────────────────────────────────────────────────────────────
 
 function getAppSetting(key: string): string | null {
-  return (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value || null;
+  return (
+    (db.prepare('SELECT value FROM app_settings WHERE key = ?').get(key) as { value: string } | undefined)?.value ||
+    null
+  );
 }
 
 // ── Active channels (admin-configured) ────────────────────────────────────
@@ -58,7 +61,10 @@ function getAppSetting(key: string): string | null {
 export function getActiveChannels(): NotifChannel[] {
   const raw = getAppSetting('notification_channels') || getAppSetting('notification_channel') || 'none';
   if (raw === 'none') return [];
-  return raw.split(',').map(c => c.trim()).filter((c): c is NotifChannel => c === 'email' || c === 'webhook' || c === 'ntfy');
+  return raw
+    .split(',')
+    .map((c) => c.trim())
+    .filter((c): c is NotifChannel => c === 'email' || c === 'webhook' || c === 'ntfy');
 }
 
 /**
@@ -68,7 +74,12 @@ export function getActiveChannels(): NotifChannel[] {
 export function getAvailableChannels(): AvailableChannels {
   const hasSmtp = !!(process.env.SMTP_HOST || getAppSetting('smtp_host'));
   const activeChannels = getActiveChannels();
-  return { email: hasSmtp, webhook: activeChannels.includes('webhook'), ntfy: activeChannels.includes('ntfy'), inapp: true };
+  return {
+    email: hasSmtp,
+    webhook: activeChannels.includes('webhook'),
+    ntfy: activeChannels.includes('ntfy'),
+    inapp: true,
+  };
 }
 
 // ── Per-user preference checks ─────────────────────────────────────────────
@@ -78,9 +89,11 @@ export function getAvailableChannels(): AvailableChannels {
  * Default (no row) = enabled. Only returns false if there's an explicit disabled row.
  */
 export function isEnabledForEvent(userId: number, eventType: NotifEventType, channel: NotifChannel): boolean {
-  const row = db.prepare(
-    'SELECT enabled FROM notification_channel_preferences WHERE user_id = ? AND event_type = ? AND channel = ?'
-  ).get(userId, eventType, channel) as { enabled: number } | undefined;
+  const row = db
+    .prepare(
+      'SELECT enabled FROM notification_channel_preferences WHERE user_id = ? AND event_type = ? AND channel = ?',
+    )
+    .get(userId, eventType, channel) as { enabled: number } | undefined;
   return row === undefined || row.enabled === 1;
 }
 
@@ -99,16 +112,20 @@ export interface PreferencesMatrix {
  * scope='user'  — excludes admin-scoped events (for user settings page)
  * scope='admin' — returns only admin-scoped events (for admin notifications tab)
  */
-export function getPreferencesMatrix(userId: number, userRole: string, scope: 'user' | 'admin' = 'user'): PreferencesMatrix {
-  const rows = db.prepare(
-    'SELECT event_type, channel, enabled FROM notification_channel_preferences WHERE user_id = ?'
-  ).all(userId) as Array<{ event_type: string; channel: string; enabled: number }>;
+export function getPreferencesMatrix(
+  userId: number,
+  userRole: string,
+  scope: 'user' | 'admin' = 'user',
+): PreferencesMatrix {
+  const rows = db
+    .prepare('SELECT event_type, channel, enabled FROM notification_channel_preferences WHERE user_id = ?')
+    .all(userId) as Array<{ event_type: string; channel: string; enabled: number }>;
 
   // Build a lookup from stored rows
   const stored: Partial<Record<string, Partial<Record<string, boolean>>>> = {};
   for (const row of rows) {
     if (!stored[row.event_type]) stored[row.event_type] = {};
-    stored[row.event_type]![row.channel] = row.enabled === 1;
+    stored[row.event_type][row.channel] = row.enabled === 1;
   }
 
   // Build the full matrix with defaults (true when no row exists)
@@ -120,25 +137,30 @@ export function getPreferencesMatrix(userId: number, userRole: string, scope: 'u
     preferences[eventType] = {};
     for (const channel of channels) {
       // Admin-scoped events use global settings for email/webhook/ntfy
-      if (scope === 'admin' && ADMIN_SCOPED_EVENTS.has(eventType) && (channel === 'email' || channel === 'webhook' || channel === 'ntfy')) {
-        preferences[eventType]![channel] = getAdminGlobalPref(eventType, channel);
+      if (
+        scope === 'admin' &&
+        ADMIN_SCOPED_EVENTS.has(eventType) &&
+        (channel === 'email' || channel === 'webhook' || channel === 'ntfy')
+      ) {
+        preferences[eventType][channel] = getAdminGlobalPref(eventType, channel);
       } else {
-        preferences[eventType]![channel] = stored[eventType]?.[channel] ?? true;
+        preferences[eventType][channel] = stored[eventType]?.[channel] ?? true;
       }
     }
   }
 
   // Filter event types by scope
-  const event_types = scope === 'admin'
-    ? allEvents.filter(e => ADMIN_SCOPED_EVENTS.has(e))
-    : allEvents.filter(e => !ADMIN_SCOPED_EVENTS.has(e));
+  const event_types =
+    scope === 'admin'
+      ? allEvents.filter((e) => ADMIN_SCOPED_EVENTS.has(e))
+      : allEvents.filter((e) => !ADMIN_SCOPED_EVENTS.has(e));
 
   // Available channels depend on scope
   let available_channels: AvailableChannels;
   if (scope === 'admin') {
     const hasSmtp = !!(process.env.SMTP_HOST || getAppSetting('smtp_host'));
-    const hasAdminWebhook = !!(getAppSetting('admin_webhook_url'));
-    const hasAdminNtfy = !!(getAppSetting('admin_ntfy_topic'));
+    const hasAdminWebhook = !!getAppSetting('admin_webhook_url');
+    const hasAdminNtfy = !!getAppSetting('admin_ntfy_topic');
     available_channels = { email: hasSmtp, webhook: hasAdminWebhook, ntfy: hasAdminNtfy, inapp: true };
   } else {
     const activeChannels = getActiveChannels();
@@ -176,7 +198,7 @@ export function getAdminGlobalPref(event: NotifEventType, channel: 'email' | 'we
 function setAdminGlobalPref(event: NotifEventType, channel: 'email' | 'webhook' | 'ntfy', enabled: boolean): void {
   db.prepare('INSERT OR REPLACE INTO app_settings (key, value) VALUES (?, ?)').run(
     `admin_notif_pref_${event}_${channel}`,
-    enabled ? '1' : '0'
+    enabled ? '1' : '0',
   );
 }
 
@@ -188,7 +210,7 @@ function applyUserChannelPrefs(
   userId: number,
   prefs: Partial<Record<string, Partial<Record<string, boolean>>>>,
   upsert: ReturnType<typeof db.prepare>,
-  del: ReturnType<typeof db.prepare>
+  del: ReturnType<typeof db.prepare>,
 ): void {
   for (const [eventType, channels] of Object.entries(prefs)) {
     if (!channels) continue;
@@ -207,15 +229,12 @@ function applyUserChannelPrefs(
  * Bulk-update preferences from the matrix UI.
  * Inserts disabled rows (enabled=0) and removes rows that are enabled (default).
  */
-export function setPreferences(
-  userId: number,
-  prefs: Partial<Record<string, Partial<Record<string, boolean>>>>
-): void {
+export function setPreferences(userId: number, prefs: Partial<Record<string, Partial<Record<string, boolean>>>>): void {
   const upsert = db.prepare(
-    'INSERT OR REPLACE INTO notification_channel_preferences (user_id, event_type, channel, enabled) VALUES (?, ?, ?, ?)'
+    'INSERT OR REPLACE INTO notification_channel_preferences (user_id, event_type, channel, enabled) VALUES (?, ?, ?, ?)',
   );
   const del = db.prepare(
-    'DELETE FROM notification_channel_preferences WHERE user_id = ? AND event_type = ? AND channel = ?'
+    'DELETE FROM notification_channel_preferences WHERE user_id = ? AND event_type = ? AND channel = ?',
   );
   db.transaction(() => applyUserChannelPrefs(userId, prefs, upsert, del))();
 }
@@ -227,13 +246,13 @@ export function setPreferences(
  */
 export function setAdminPreferences(
   userId: number,
-  prefs: Partial<Record<string, Partial<Record<string, boolean>>>>
+  prefs: Partial<Record<string, Partial<Record<string, boolean>>>>,
 ): void {
   const upsert = db.prepare(
-    'INSERT OR REPLACE INTO notification_channel_preferences (user_id, event_type, channel, enabled) VALUES (?, ?, ?, ?)'
+    'INSERT OR REPLACE INTO notification_channel_preferences (user_id, event_type, channel, enabled) VALUES (?, ?, ?, ?)',
   );
   const del = db.prepare(
-    'DELETE FROM notification_channel_preferences WHERE user_id = ? AND event_type = ? AND channel = ?'
+    'DELETE FROM notification_channel_preferences WHERE user_id = ? AND event_type = ? AND channel = ?',
   );
 
   // Split global (email/webhook) from per-user (inapp) prefs
@@ -245,10 +264,10 @@ export function setAdminPreferences(
     for (const [channel, enabled] of Object.entries(channels)) {
       if (ADMIN_GLOBAL_CHANNELS.includes(channel as NotifChannel)) {
         if (!globalPrefs[eventType]) globalPrefs[eventType] = {};
-        globalPrefs[eventType]![channel] = enabled;
+        globalPrefs[eventType][channel] = enabled;
       } else {
         if (!userPrefs[eventType]) userPrefs[eventType] = {};
-        userPrefs[eventType]![channel] = enabled;
+        userPrefs[eventType][channel] = enabled;
       }
     }
   }

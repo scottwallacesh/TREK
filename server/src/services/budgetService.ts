@@ -14,13 +14,17 @@ export function verifyTripAccess(tripId: string | number, userId: number) {
 }
 
 function loadItemMembers(itemId: number | string) {
-  const rows = db.prepare(`
+  const rows = db
+    .prepare(
+      `
     SELECT bm.user_id, bm.paid, u.username, u.avatar
     FROM budget_item_members bm
     JOIN users u ON bm.user_id = u.id
     WHERE bm.budget_item_id = ?
-  `).all(itemId) as BudgetItemMember[];
-  return rows.map(m => ({ ...m, avatar_url: avatarUrl(m) }));
+  `,
+    )
+    .all(itemId) as BudgetItemMember[];
+  return rows.map((m) => ({ ...m, avatar_url: avatarUrl(m) }));
 }
 
 // ---------------------------------------------------------------------------
@@ -28,70 +32,103 @@ function loadItemMembers(itemId: number | string) {
 // ---------------------------------------------------------------------------
 
 export function listBudgetItems(tripId: string | number) {
-  const items = db.prepare(`
+  const items = db
+    .prepare(
+      `
     SELECT bi.* FROM budget_items bi
     LEFT JOIN budget_category_order bco ON bco.trip_id = bi.trip_id AND bco.category = bi.category
     WHERE bi.trip_id = ?
     ORDER BY COALESCE(bco.sort_order, 999999) ASC, bi.sort_order ASC
-  `).all(tripId) as BudgetItem[];
+  `,
+    )
+    .all(tripId) as BudgetItem[];
 
-  const itemIds = items.map(i => i.id);
+  const itemIds = items.map((i) => i.id);
   const membersByItem: Record<number, (BudgetItemMember & { avatar_url: string | null })[]> = {};
 
   if (itemIds.length > 0) {
-    const allMembers = db.prepare(`
+    const allMembers = db
+      .prepare(
+        `
       SELECT bm.budget_item_id, bm.user_id, bm.paid, u.username, u.avatar
       FROM budget_item_members bm
       JOIN users u ON bm.user_id = u.id
       WHERE bm.budget_item_id IN (${itemIds.map(() => '?').join(',')})
-    `).all(...itemIds) as (BudgetItemMember & { budget_item_id: number })[];
+    `,
+      )
+      .all(...itemIds) as (BudgetItemMember & { budget_item_id: number })[];
 
     for (const m of allMembers) {
       if (!membersByItem[m.budget_item_id]) membersByItem[m.budget_item_id] = [];
       membersByItem[m.budget_item_id].push({
-        user_id: m.user_id, paid: m.paid, username: m.username, avatar_url: avatarUrl(m),
+        user_id: m.user_id,
+        paid: m.paid,
+        username: m.username,
+        avatar_url: avatarUrl(m),
       });
     }
   }
 
-  items.forEach(item => { item.members = membersByItem[item.id] || []; });
+  items.forEach((item) => {
+    item.members = membersByItem[item.id] || [];
+  });
   return items;
 }
 
 export function createBudgetItem(
   tripId: string | number,
-  data: { category?: string; name: string; total_price?: number; persons?: number | null; days?: number | null; note?: string | null; expense_date?: string | null },
+  data: {
+    category?: string;
+    name: string;
+    total_price?: number;
+    persons?: number | null;
+    days?: number | null;
+    note?: string | null;
+    expense_date?: string | null;
+  },
 ) {
-  const maxOrder = db.prepare(
-    'SELECT MAX(sort_order) as max FROM budget_items WHERE trip_id = ?'
-  ).get(tripId) as { max: number | null };
+  const maxOrder = db.prepare('SELECT MAX(sort_order) as max FROM budget_items WHERE trip_id = ?').get(tripId) as {
+    max: number | null;
+  };
   const sortOrder = (maxOrder.max !== null ? maxOrder.max : -1) + 1;
 
   const cat = data.category || 'Other';
 
   // Ensure category has a sort_order entry
-  const catExists = db.prepare('SELECT 1 FROM budget_category_order WHERE trip_id = ? AND category = ?').get(tripId, cat);
+  const catExists = db
+    .prepare('SELECT 1 FROM budget_category_order WHERE trip_id = ? AND category = ?')
+    .get(tripId, cat);
   if (!catExists) {
-    const maxCatOrder = db.prepare('SELECT MAX(sort_order) as max FROM budget_category_order WHERE trip_id = ?').get(tripId) as { max: number | null };
+    const maxCatOrder = db
+      .prepare('SELECT MAX(sort_order) as max FROM budget_category_order WHERE trip_id = ?')
+      .get(tripId) as { max: number | null };
     const catOrder = (maxCatOrder?.max !== null && maxCatOrder?.max !== undefined ? maxCatOrder.max : -1) + 1;
-    db.prepare('INSERT OR IGNORE INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?)').run(tripId, cat, catOrder);
+    db.prepare('INSERT OR IGNORE INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?)').run(
+      tripId,
+      cat,
+      catOrder,
+    );
   }
 
-  const result = db.prepare(
-    'INSERT INTO budget_items (trip_id, category, name, total_price, persons, days, note, sort_order, expense_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)'
-  ).run(
-    tripId,
-    cat,
-    data.name,
-    data.total_price || 0,
-    data.persons != null ? data.persons : null,
-    data.days !== undefined && data.days !== null ? data.days : null,
-    data.note || null,
-    sortOrder,
-    data.expense_date || null,
-  );
+  const result = db
+    .prepare(
+      'INSERT INTO budget_items (trip_id, category, name, total_price, persons, days, note, sort_order, expense_date) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    )
+    .run(
+      tripId,
+      cat,
+      data.name,
+      data.total_price || 0,
+      data.persons != null ? data.persons : null,
+      data.days !== undefined && data.days !== null ? data.days : null,
+      data.note || null,
+      sortOrder,
+      data.expense_date || null,
+    );
 
-  const item = db.prepare('SELECT * FROM budget_items WHERE id = ?').get(result.lastInsertRowid) as BudgetItem & { members?: BudgetItemMember[] };
+  const item = db.prepare('SELECT * FROM budget_items WHERE id = ?').get(result.lastInsertRowid) as BudgetItem & {
+    members?: BudgetItemMember[];
+  };
   item.members = [];
   return item;
 }
@@ -110,12 +147,22 @@ export function linkBudgetItemToReservation(
 export function updateBudgetItem(
   id: string | number,
   tripId: string | number,
-  data: { category?: string; name?: string; total_price?: number; persons?: number | null; days?: number | null; note?: string | null; sort_order?: number; expense_date?: string | null },
+  data: {
+    category?: string;
+    name?: string;
+    total_price?: number;
+    persons?: number | null;
+    days?: number | null;
+    note?: string | null;
+    sort_order?: number;
+    expense_date?: string | null;
+  },
 ) {
   const item = db.prepare('SELECT * FROM budget_items WHERE id = ? AND trip_id = ?').get(id, tripId);
   if (!item) return null;
 
-  db.prepare(`
+  db.prepare(
+    `
     UPDATE budget_items SET
       category = COALESCE(?, category),
       name = COALESCE(?, name),
@@ -126,29 +173,46 @@ export function updateBudgetItem(
       sort_order = CASE WHEN ? IS NOT NULL THEN ? ELSE sort_order END,
       expense_date = CASE WHEN ? THEN ? ELSE expense_date END
     WHERE id = ?
-  `).run(
+  `,
+  ).run(
     data.category || null,
     data.name || null,
-    data.total_price !== undefined ? 1 : null, data.total_price !== undefined ? data.total_price : 0,
-    data.persons !== undefined ? 1 : null, data.persons !== undefined ? data.persons : null,
-    data.days !== undefined ? 1 : 0, data.days !== undefined ? data.days : null,
-    data.note !== undefined ? 1 : 0, data.note !== undefined ? data.note : null,
-    data.sort_order !== undefined ? 1 : null, data.sort_order !== undefined ? data.sort_order : 0,
-    data.expense_date !== undefined ? 1 : 0, data.expense_date !== undefined ? (data.expense_date || null) : null,
+    data.total_price !== undefined ? 1 : null,
+    data.total_price !== undefined ? data.total_price : 0,
+    data.persons !== undefined ? 1 : null,
+    data.persons !== undefined ? data.persons : null,
+    data.days !== undefined ? 1 : 0,
+    data.days !== undefined ? data.days : null,
+    data.note !== undefined ? 1 : 0,
+    data.note !== undefined ? data.note : null,
+    data.sort_order !== undefined ? 1 : null,
+    data.sort_order !== undefined ? data.sort_order : 0,
+    data.expense_date !== undefined ? 1 : 0,
+    data.expense_date !== undefined ? data.expense_date || null : null,
     id,
   );
 
   // If category changed, update category order table
   if (data.category) {
-    const catExists = db.prepare('SELECT 1 FROM budget_category_order WHERE trip_id = ? AND category = ?').get(tripId, data.category);
+    const catExists = db
+      .prepare('SELECT 1 FROM budget_category_order WHERE trip_id = ? AND category = ?')
+      .get(tripId, data.category);
     if (!catExists) {
-      const maxCatOrder = db.prepare('SELECT MAX(sort_order) as max FROM budget_category_order WHERE trip_id = ?').get(tripId) as { max: number | null };
+      const maxCatOrder = db
+        .prepare('SELECT MAX(sort_order) as max FROM budget_category_order WHERE trip_id = ?')
+        .get(tripId) as { max: number | null };
       const catOrder = (maxCatOrder?.max !== null && maxCatOrder?.max !== undefined ? maxCatOrder.max : -1) + 1;
-      db.prepare('INSERT OR IGNORE INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?)').run(tripId, data.category, catOrder);
+      db.prepare('INSERT OR IGNORE INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?)').run(
+        tripId,
+        data.category,
+        catOrder,
+      );
     }
   }
 
-  const updated = db.prepare('SELECT * FROM budget_items WHERE id = ?').get(id) as BudgetItem & { members?: BudgetItemMember[] };
+  const updated = db.prepare('SELECT * FROM budget_items WHERE id = ?').get(id) as BudgetItem & {
+    members?: BudgetItemMember[];
+  };
   updated.members = loadItemMembers(id);
   return updated;
 }
@@ -169,33 +233,45 @@ export function updateMembers(id: string | number, tripId: string | number, user
   if (!item) return null;
 
   const existingPaid: Record<number, number> = {};
-  const existing = db.prepare('SELECT user_id, paid FROM budget_item_members WHERE budget_item_id = ?').all(id) as { user_id: number; paid: number }[];
+  const existing = db.prepare('SELECT user_id, paid FROM budget_item_members WHERE budget_item_id = ?').all(id) as {
+    user_id: number;
+    paid: number;
+  }[];
   for (const e of existing) existingPaid[e.user_id] = e.paid;
 
   db.prepare('DELETE FROM budget_item_members WHERE budget_item_id = ?').run(id);
 
   if (userIds.length > 0) {
-    const insert = db.prepare('INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid) VALUES (?, ?, ?)');
+    const insert = db.prepare(
+      'INSERT OR IGNORE INTO budget_item_members (budget_item_id, user_id, paid) VALUES (?, ?, ?)',
+    );
     for (const userId of userIds) insert.run(id, userId, existingPaid[userId] || 0);
     db.prepare('UPDATE budget_items SET persons = ? WHERE id = ?').run(userIds.length, id);
   } else {
     db.prepare('UPDATE budget_items SET persons = NULL WHERE id = ?').run(id);
   }
 
-  const members = loadItemMembers(id).map(m => ({ ...m, avatar_url: avatarUrl(m) }));
+  const members = loadItemMembers(id).map((m) => ({ ...m, avatar_url: avatarUrl(m) }));
   const updated = db.prepare('SELECT * FROM budget_items WHERE id = ?').get(id) as BudgetItem;
   return { members, item: updated };
 }
 
 export function toggleMemberPaid(id: string | number, userId: string | number, paid: boolean) {
-  db.prepare('UPDATE budget_item_members SET paid = ? WHERE budget_item_id = ? AND user_id = ?')
-    .run(paid ? 1 : 0, id, userId);
+  db.prepare('UPDATE budget_item_members SET paid = ? WHERE budget_item_id = ? AND user_id = ?').run(
+    paid ? 1 : 0,
+    id,
+    userId,
+  );
 
-  const member = db.prepare(`
+  const member = db
+    .prepare(
+      `
     SELECT bm.user_id, bm.paid, u.username, u.avatar
     FROM budget_item_members bm JOIN users u ON bm.user_id = u.id
     WHERE bm.budget_item_id = ? AND bm.user_id = ?
-  `).get(id, userId) as BudgetItemMember | undefined;
+  `,
+    )
+    .get(id, userId) as BudgetItemMember | undefined;
 
   return member ? { ...member, avatar_url: avatarUrl(member) } : null;
 }
@@ -205,7 +281,9 @@ export function toggleMemberPaid(id: string | number, userId: string | number, p
 // ---------------------------------------------------------------------------
 
 export function getPerPersonSummary(tripId: string | number) {
-  const summary = db.prepare(`
+  const summary = db
+    .prepare(
+      `
     SELECT bm.user_id, u.username, u.avatar,
       SUM(bi.total_price * 1.0 / (SELECT COUNT(*) FROM budget_item_members WHERE budget_item_id = bi.id)) as total_assigned,
       SUM(CASE WHEN bm.paid = 1 THEN bi.total_price * 1.0 / (SELECT COUNT(*) FROM budget_item_members WHERE budget_item_id = bi.id) ELSE 0 END) as total_paid,
@@ -215,9 +293,18 @@ export function getPerPersonSummary(tripId: string | number) {
     JOIN users u ON bm.user_id = u.id
     WHERE bi.trip_id = ?
     GROUP BY bm.user_id
-  `).all(tripId) as { user_id: number; username: string; avatar: string | null; total_assigned: number; total_paid: number; items_count: number }[];
+  `,
+    )
+    .all(tripId) as {
+    user_id: number;
+    username: string;
+    avatar: string | null;
+    total_assigned: number;
+    total_paid: number;
+    items_count: number;
+  }[];
 
-  return summary.map(s => ({ ...s, avatar_url: avatarUrl(s) }));
+  return summary.map((s) => ({ ...s, avatar_url: avatarUrl(s) }));
 }
 
 // ---------------------------------------------------------------------------
@@ -226,21 +313,26 @@ export function getPerPersonSummary(tripId: string | number) {
 
 export function calculateSettlement(tripId: string | number) {
   const items = db.prepare('SELECT * FROM budget_items WHERE trip_id = ?').all(tripId) as BudgetItem[];
-  const allMembers = db.prepare(`
+  const allMembers = db
+    .prepare(
+      `
     SELECT bm.budget_item_id, bm.user_id, bm.paid, u.username, u.avatar
     FROM budget_item_members bm
     JOIN users u ON bm.user_id = u.id
     WHERE bm.budget_item_id IN (SELECT id FROM budget_items WHERE trip_id = ?)
-  `).all(tripId) as (BudgetItemMember & { budget_item_id: number })[];
+  `,
+    )
+    .all(tripId) as (BudgetItemMember & { budget_item_id: number })[];
 
   // Calculate net balance per user: positive = is owed money, negative = owes money
-  const balances: Record<number, { user_id: number; username: string; avatar_url: string | null; balance: number }> = {};
+  const balances: Record<number, { user_id: number; username: string; avatar_url: string | null; balance: number }> =
+    {};
 
   for (const item of items) {
-    const members = allMembers.filter(m => m.budget_item_id === item.id);
+    const members = allMembers.filter((m) => m.budget_item_id === item.id);
     if (members.length === 0) continue;
 
-    const payers = members.filter(m => m.paid);
+    const payers = members.filter((m) => m.paid);
     if (payers.length === 0) continue; // no one marked as paid
 
     const sharePerMember = item.total_price / members.length;
@@ -258,17 +350,22 @@ export function calculateSettlement(tripId: string | number) {
   }
 
   // Calculate optimized payment flows (greedy algorithm)
-  const people = Object.values(balances).filter(b => Math.abs(b.balance) > 0.01);
-  const debtors = people.filter(p => p.balance < -0.01).map(p => ({ ...p, amount: -p.balance }));
-  const creditors = people.filter(p => p.balance > 0.01).map(p => ({ ...p, amount: p.balance }));
+  const people = Object.values(balances).filter((b) => Math.abs(b.balance) > 0.01);
+  const debtors = people.filter((p) => p.balance < -0.01).map((p) => ({ ...p, amount: -p.balance }));
+  const creditors = people.filter((p) => p.balance > 0.01).map((p) => ({ ...p, amount: p.balance }));
 
   // Sort by amount descending for efficient matching
   debtors.sort((a, b) => b.amount - a.amount);
   creditors.sort((a, b) => b.amount - a.amount);
 
-  const flows: { from: { user_id: number; username: string; avatar_url: string | null }; to: { user_id: number; username: string; avatar_url: string | null }; amount: number }[] = [];
+  const flows: {
+    from: { user_id: number; username: string; avatar_url: string | null };
+    to: { user_id: number; username: string; avatar_url: string | null };
+    amount: number;
+  }[] = [];
 
-  let di = 0, ci = 0;
+  let di = 0,
+    ci = 0;
   while (di < debtors.length && ci < creditors.length) {
     const transfer = Math.min(debtors[di].amount, creditors[ci].amount);
     if (transfer > 0.01) {
@@ -285,7 +382,7 @@ export function calculateSettlement(tripId: string | number) {
   }
 
   return {
-    balances: Object.values(balances).map(b => ({ ...b, balance: Math.round(b.balance * 100) / 100 })),
+    balances: Object.values(balances).map((b) => ({ ...b, balance: Math.round(b.balance * 100) / 100 })),
     flows,
   };
 }
@@ -303,7 +400,7 @@ export function reorderBudgetItems(tripId: string | number, orderedIds: number[]
 
 export function reorderBudgetCategories(tripId: string | number, orderedCategories: string[]) {
   const upsert = db.prepare(
-    'INSERT INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?) ON CONFLICT(trip_id, category) DO UPDATE SET sort_order = excluded.sort_order'
+    'INSERT INTO budget_category_order (trip_id, category, sort_order) VALUES (?, ?, ?) ON CONFLICT(trip_id, category) DO UPDATE SET sort_order = excluded.sort_order',
   );
   db.transaction(() => {
     orderedCategories.forEach((cat, index) => upsert.run(tripId, cat, index));

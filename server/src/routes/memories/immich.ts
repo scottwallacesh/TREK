@@ -1,9 +1,7 @@
-import express, { Request, Response } from 'express';
 import { canAccessTrip } from '../../db/database';
 import { authenticate } from '../../middleware/auth';
-import { broadcast } from '../../websocket';
-import { AuthRequest } from '../../types';
 import { getClientIp } from '../../services/auditLog';
+import { canAccessUserPhoto } from '../../services/memories/helpersService';
 import {
   getConnectionSettings,
   saveImmichSettings,
@@ -19,7 +17,10 @@ import {
   getAssetInfo,
   isValidAssetId,
 } from '../../services/memories/immichService';
-import { canAccessUserPhoto } from '../../services/memories/helpersService';
+import { AuthRequest } from '../../types';
+import { broadcast } from '../../websocket';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 
@@ -58,7 +59,7 @@ router.post('/test', authenticate, async (req: Request, res: Response) => {
 router.get('/browse', authenticate, async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = await browseTimeline(authReq.user.id);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ buckets: result.buckets });
 });
 
@@ -68,7 +69,7 @@ router.post('/search', authenticate, async (req: Request, res: Response) => {
   const pageNum = Math.max(1, Number(page) || 1);
   const pageSize = Math.min(Number(size) || 50, 200);
   const result = await searchPhotos(authReq.user.id, from, to, pageNum, pageSize);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ assets: result.assets || [], hasMore: !!result.hasMore });
 });
 
@@ -83,7 +84,7 @@ router.get('/assets/:tripId/:assetId/:ownerId/info', authenticate, async (req: R
     return res.status(403).json({ error: 'Forbidden' });
   }
   const result = await getAssetInfo(authReq.user.id, assetId, Number(ownerId));
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json(result.data);
 });
 
@@ -116,14 +117,14 @@ router.get('/assets/:tripId/:assetId/:ownerId/original', authenticate, async (re
 router.get('/albums', authenticate, async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = await listAlbums(authReq.user.id);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ albums: result.albums });
 });
 
 router.get('/albums/:albumId/photos', authenticate, async (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const result = await getAlbumPhotos(authReq.user.id, req.params.albumId);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ assets: result.assets });
 });
 
@@ -132,9 +133,9 @@ router.post('/trips/:tripId/album-links/:linkId/sync', authenticate, async (req:
   const { tripId, linkId } = req.params;
   const sid = req.headers['x-socket-id'] as string;
   const result = await syncAlbumAssets(tripId, linkId, authReq.user.id, sid);
-  if (result.error) return res.status(result.status!).json({ error: result.error });
+  if (result.error) return res.status(result.status).json({ error: result.error });
   res.json({ success: true, added: result.added, total: result.total });
-  if (result.added! > 0) {
+  if (result.added > 0) {
     broadcast(tripId, 'memories:updated', { userId: authReq.user.id }, req.headers['x-socket-id'] as string);
   }
 });

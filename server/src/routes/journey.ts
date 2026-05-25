@@ -1,15 +1,21 @@
+import { db } from '../db/database';
+import { authenticate } from '../middleware/auth';
+import { getAllowedExtensions } from '../services/fileService';
+import * as svc from '../services/journeyService';
+import {
+  createOrUpdateJourneyShareLink,
+  getJourneyShareLink,
+  deleteJourneyShareLink,
+  getPublicJourney,
+} from '../services/journeyShareService';
+import { uploadToImmich } from '../services/memories/immichService';
+import { AuthRequest } from '../types';
+
 import express, { Request, Response } from 'express';
 import multer from 'multer';
-import path from 'node:path';
-import fs from 'node:fs';
 import crypto from 'node:crypto';
-import { authenticate } from '../middleware/auth';
-import { AuthRequest } from '../types';
-import * as svc from '../services/journeyService';
-import { db } from '../db/database';
-import { createOrUpdateJourneyShareLink, getJourneyShareLink, deleteJourneyShareLink, getPublicJourney } from '../services/journeyShareService';
-import { uploadToImmich } from '../services/memories/immichService';
-import { getAllowedExtensions } from '../services/fileService';
+import fs from 'node:fs';
+import path from 'node:path';
 
 const router = express.Router();
 
@@ -33,7 +39,9 @@ const imageFilter: multer.Options['fileFilter'] = (_req, file, cb) => {
     return cb(err);
   }
   const ext = path.extname(file.originalname).toLowerCase().replace('.', '');
-  const allowed = getAllowedExtensions().split(',').map(e => e.trim().toLowerCase());
+  const allowed = getAllowedExtensions()
+    .split(',')
+    .map((e) => e.trim().toLowerCase());
   if (!allowed.includes('*') && !allowed.includes(ext)) {
     const err: Error & { statusCode?: number } = new Error(`File type .${ext} is not allowed`);
     err.statusCode = 400;
@@ -83,7 +91,12 @@ router.get('/available-trips', authenticate, (req: Request, res: Response) => {
 
 router.patch('/entries/:entryId', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
-  const result = svc.updateEntry(Number(req.params.entryId), authReq.user.id, req.body || {}, req.headers['x-socket-id'] as string);
+  const result = svc.updateEntry(
+    Number(req.params.entryId),
+    authReq.user.id,
+    req.body || {},
+    req.headers['x-socket-id'] as string,
+  );
   if (!result) return res.status(404).json({ error: 'Entry not found' });
   res.json(result);
 });
@@ -106,18 +119,14 @@ router.post('/entries/:entryId/photos', authenticate, upload.array('photos'), as
   const results: any[] = [];
   for (const file of files) {
     const relativePath = `journey/${file.filename}`;
-    const photo = svc.addPhoto(
-      Number(req.params.entryId),
-      authReq.user.id,
-      relativePath,
-      undefined,
-      req.body?.caption
-    );
+    const photo = svc.addPhoto(Number(req.params.entryId), authReq.user.id, relativePath, undefined, req.body?.caption);
     if (photo) {
       // Mirror to Immich only when the user has explicitly opted in via the
       // Immich integration settings. Avoids the "surprise upload" in #730
       // where a write-capable API key implicitly enabled mirroring.
-      const prefs = db.prepare('SELECT immich_auto_upload FROM users WHERE id = ?').get(authReq.user.id) as { immich_auto_upload?: number } | undefined;
+      const prefs = db.prepare('SELECT immich_auto_upload FROM users WHERE id = ?').get(authReq.user.id) as
+        | { immich_auto_upload?: number }
+        | undefined;
       if (prefs?.immich_auto_upload) {
         try {
           const immichId = await uploadToImmich(authReq.user.id, relativePath, file.originalname);
@@ -147,7 +156,14 @@ router.post('/entries/:entryId/provider-photos', authenticate, (req: Request, re
   if (Array.isArray(asset_ids) && provider) {
     const added: any[] = [];
     for (const id of asset_ids) {
-      const photo = svc.addProviderPhoto(Number(req.params.entryId), authReq.user.id, provider, String(id), caption, pp);
+      const photo = svc.addProviderPhoto(
+        Number(req.params.entryId),
+        authReq.user.id,
+        provider,
+        String(id),
+        caption,
+        pp,
+      );
       if (photo) added.push(photo);
     }
     return res.status(201).json({ photos: added, added: added.length });
@@ -193,7 +209,9 @@ router.delete('/photos/:photoId', authenticate, async (req: Request, res: Respon
   if (!photo) return res.status(404).json({ error: 'Photo not found' });
   if (photo.file_path) {
     const fullPath = path.join(__dirname, '../../uploads', photo.file_path);
-    try { fs.unlinkSync(fullPath); } catch {}
+    try {
+      fs.unlinkSync(fullPath);
+    } catch {}
   }
   res.json({ success: true });
 });
@@ -206,7 +224,7 @@ router.post('/:id/gallery/photos', authenticate, upload.array('photos'), async (
   const files = req.files as Express.Multer.File[];
   if (!files?.length) return res.status(400).json({ error: 'No files uploaded' });
 
-  const filePaths = files.map(f => ({ path: `journey/${f.filename}` }));
+  const filePaths = files.map((f) => ({ path: `journey/${f.filename}` }));
   const photos = svc.uploadGalleryPhotos(Number(req.params.id), authReq.user.id, filePaths);
   if (!photos.length) return res.status(403).json({ error: 'Not allowed' });
   res.status(201).json({ photos });
@@ -221,14 +239,28 @@ router.post('/:id/gallery/provider-photos', authenticate, (req: Request, res: Re
   if (Array.isArray(asset_ids) && provider) {
     const added: any[] = [];
     for (const id of asset_ids) {
-      const photo = svc.addProviderPhotoToGallery(Number(req.params.id), authReq.user.id, provider, String(id), undefined, pp);
+      const photo = svc.addProviderPhotoToGallery(
+        Number(req.params.id),
+        authReq.user.id,
+        provider,
+        String(id),
+        undefined,
+        pp,
+      );
       if (photo) added.push(photo);
     }
     return res.status(201).json({ photos: added, added: added.length });
   }
 
   if (!provider || !asset_id) return res.status(400).json({ error: 'provider and asset_id required' });
-  const photo = svc.addProviderPhotoToGallery(Number(req.params.id), authReq.user.id, provider, asset_id, undefined, pp);
+  const photo = svc.addProviderPhotoToGallery(
+    Number(req.params.id),
+    authReq.user.id,
+    provider,
+    asset_id,
+    undefined,
+    pp,
+  );
   if (!photo) return res.status(403).json({ error: 'Not allowed or duplicate' });
   res.status(201).json(photo);
 });
@@ -240,7 +272,9 @@ router.delete('/:id/gallery/:journeyPhotoId', authenticate, async (req: Request,
   if (!photo) return res.status(404).json({ error: 'Photo not found or not allowed' });
   if (photo.file_path) {
     const fullPath = path.join(__dirname, '../../uploads', photo.file_path);
-    try { fs.unlinkSync(fullPath); } catch {}
+    try {
+      fs.unlinkSync(fullPath);
+    } catch {}
   }
   res.status(204).end();
 });
@@ -319,10 +353,17 @@ router.post('/:id/entries', authenticate, (req: Request, res: Response) => {
 router.put('/:id/entries/reorder', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const orderedIds = (req.body || {}).orderedIds;
-  if (!Array.isArray(orderedIds) || !orderedIds.every(id => Number.isFinite(Number(id)))) {
+  if (!Array.isArray(orderedIds) || !orderedIds.every((id) => Number.isFinite(Number(id)))) {
     return res.status(400).json({ error: 'orderedIds must be an array of numbers' });
   }
-  if (!svc.reorderEntries(Number(req.params.id), authReq.user.id, orderedIds.map(Number), req.headers['x-socket-id'] as string)) {
+  if (
+    !svc.reorderEntries(
+      Number(req.params.id),
+      authReq.user.id,
+      orderedIds.map(Number),
+      req.headers['x-socket-id'] as string,
+    )
+  ) {
     return res.status(403).json({ error: 'Not allowed' });
   }
   res.json({ success: true });
@@ -377,7 +418,11 @@ router.get('/:id/share-link', authenticate, (req: Request, res: Response) => {
 router.post('/:id/share-link', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { share_timeline, share_gallery, share_map } = req.body || {};
-  const result = createOrUpdateJourneyShareLink(Number(req.params.id), authReq.user.id, { share_timeline, share_gallery, share_map });
+  const result = createOrUpdateJourneyShareLink(Number(req.params.id), authReq.user.id, {
+    share_timeline,
+    share_gallery,
+    share_map,
+  });
   if (!result) return res.status(403).json({ error: 'Not allowed' });
   res.json(result);
 });

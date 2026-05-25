@@ -7,10 +7,20 @@
  * - PLACE-014: reordering within a day is tested in assignments.test.ts
  * - PLACE-019: GPX bulk import tested here using the test fixture
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
-import request from 'supertest';
+import { createApp } from '../../src/app';
+import { runMigrations } from '../../src/db/migrations';
+import { createTables } from '../../src/db/schema';
+import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
+import { invalidatePermissionsCache } from '../../src/services/permissions';
+import * as placeService from '../../src/services/placeService';
+import { authCookie } from '../helpers/auth';
+import { createUser, createAdmin, createTrip, createPlace, addTripMember } from '../helpers/factories';
+import { resetTestDb } from '../helpers/test-db';
+
 import type { Application } from 'express';
 import path from 'path';
+import request from 'supertest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach, afterAll } from 'vitest';
 
 const { testDb, dbMock } = vi.hoisted(() => {
   const Database = require('better-sqlite3');
@@ -23,13 +33,29 @@ const { testDb, dbMock } = vi.hoisted(() => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: (placeId: number) => {
-      const place: any = db.prepare(`SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`).get(placeId);
+      const place: any = db
+        .prepare(
+          `SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`,
+        )
+        .get(placeId);
       if (!place) return null;
-      const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-      return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
+      const tags = db
+        .prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`)
+        .all(placeId);
+      return {
+        ...place,
+        category: place.category_id
+          ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon }
+          : null,
+        tags,
+      };
     },
     canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
+      db
+        .prepare(
+          `SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`,
+        )
+        .get(userId, tripId, userId),
     isOwner: (tripId: any, userId: number) =>
       !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
@@ -50,16 +76,6 @@ vi.mock('../../src/services/placeService', async (importOriginal) => {
     searchPlaceImage: vi.fn(),
   };
 });
-
-import { createApp } from '../../src/app';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { resetTestDb } from '../helpers/test-db';
-import { createUser, createAdmin, createTrip, createPlace, addTripMember } from '../helpers/factories';
-import { authCookie } from '../helpers/auth';
-import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
-import * as placeService from '../../src/services/placeService';
-import { invalidatePermissionsCache } from '../../src/services/permissions';
 
 const app: Application = createApp();
 const GPX_FIXTURE = path.join(__dirname, '../fixtures/test.gpx');
@@ -163,9 +179,7 @@ describe('List places', () => {
     createPlace(testDb, trip.id, { name: 'Place A' });
     createPlace(testDb, trip.id, { name: 'Place B' });
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/places`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/places`).set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body.places).toHaveLength(2);
   });
@@ -177,9 +191,7 @@ describe('List places', () => {
     addTripMember(testDb, trip.id, member.id);
     createPlace(testDb, trip.id, { name: 'Shared Place' });
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/places`)
-      .set('Cookie', authCookie(member.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/places`).set('Cookie', authCookie(member.id));
     expect(res.status).toBe(200);
     expect(res.body.places).toHaveLength(1);
   });
@@ -189,9 +201,7 @@ describe('List places', () => {
     const { user: other } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/places`)
-      .set('Cookie', authCookie(other.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/places`).set('Cookie', authCookie(other.id));
     expect(res.status).toBe(404);
   });
 
@@ -225,9 +235,7 @@ describe('Get place', () => {
     const trip = createTrip(testDb, user.id);
     const place = createPlace(testDb, trip.id, { name: 'Test Place' });
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/places/${place.id}`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/places/${place.id}`).set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body.place.id).toBe(place.id);
     expect(Array.isArray(res.body.place.tags)).toBe(true);
@@ -237,9 +245,7 @@ describe('Get place', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/places/99999`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/places/99999`).set('Cookie', authCookie(user.id));
     expect(res.status).toBe(404);
   });
 });
@@ -291,9 +297,7 @@ describe('Delete place', () => {
     expect(del.status).toBe(200);
     expect(del.body.success).toBe(true);
 
-    const get = await request(app)
-      .get(`/api/trips/${trip.id}/places/${place.id}`)
-      .set('Cookie', authCookie(user.id));
+    const get = await request(app).get(`/api/trips/${trip.id}/places/${place.id}`).set('Cookie', authCookie(user.id));
     expect(get.status).toBe(404);
   });
 
@@ -321,9 +325,7 @@ describe('Tags', () => {
     // Create a tag in DB
     testDb.prepare('INSERT INTO tags (name, user_id) VALUES (?, ?)').run('Must-see', user.id);
 
-    const res = await request(app)
-      .get('/api/tags')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/tags').set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body.tags).toBeDefined();
     const names = (res.body.tags as any[]).map((t: any) => t.name);
@@ -356,9 +358,7 @@ describe('Tags', () => {
     const tagResult = testDb.prepare('INSERT INTO tags (name, user_id) VALUES (?, ?)').run('OldTag', user.id);
     const tagId = tagResult.lastInsertRowid as number;
 
-    const res = await request(app)
-      .delete(`/api/tags/${tagId}`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).delete(`/api/tags/${tagId}`).set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
 
     const tags = await request(app).get('/api/tags').set('Cookie', authCookie(user.id));
@@ -463,9 +463,7 @@ describe('Search places', () => {
     createPlace(testDb, trip.id, { name: 'Eiffel Tower' });
     createPlace(testDb, trip.id, { name: 'Arc de Triomphe' });
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/places?search=Eiffel`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/places?search=Eiffel`).set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body.places).toHaveLength(1);
     expect(res.body.places[0].name).toBe('Eiffel Tower');
@@ -487,9 +485,7 @@ describe('Search places', () => {
 
     createPlace(testDb, trip.id, { name: 'Plain Place' });
 
-    const res = await request(app)
-      .get(`/api/trips/${trip.id}/places?tag=${tagId}`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`/api/trips/${trip.id}/places?tag=${tagId}`).set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body.places).toHaveLength(1);
     expect(res.body.places[0].name).toBe('Scenic Place');
@@ -503,9 +499,7 @@ describe('Search places', () => {
 describe('Categories', () => {
   it('PLACE-015 — GET /api/categories returns all categories', async () => {
     const { user } = createUser(testDb);
-    const res = await request(app)
-      .get('/api/categories')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/categories').set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.categories)).toBe(true);
     expect(res.body.categories.length).toBeGreaterThan(0);
@@ -532,7 +526,8 @@ describe('Naver list import', () => {
 
     testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'naver_list_import'").run();
 
-    const fetchMock = vi.fn()
+    const fetchMock = vi
+      .fn()
       .mockResolvedValueOnce({
         ok: true,
         url: `https://map.naver.com/v5/favorite/myPlace/folder/${folderId}`,
@@ -543,7 +538,13 @@ describe('Naver list import', () => {
           folder: { name: 'Seoul Food', bookmarkCount: 22 },
           bookmarkList: [
             { name: 'SINSAJEON', px: 127.0226195, py: 37.5186363, memo: null, address: 'Sinsa-dong Seoul' },
-            { name: 'Ilpyeondeungsim', px: 126.9852986, py: 37.5629334, memo: 'Try lunch set', address: 'Myeong-dong Seoul' },
+            {
+              name: 'Ilpyeondeungsim',
+              px: 126.9852986,
+              py: 37.5629334,
+              memo: 'Try lunch set',
+              address: 'Myeong-dong Seoul',
+            },
           ],
         }),
       })
@@ -600,8 +601,7 @@ describe('Naver list import', () => {
 
     testDb.prepare("UPDATE addons SET enabled = 1 WHERE id = 'naver_list_import'").run();
 
-    const fetchMock = vi.fn()
-      .mockResolvedValueOnce({ ok: false });
+    const fetchMock = vi.fn().mockResolvedValueOnce({ ok: false });
 
     vi.stubGlobal('fetch', fetchMock);
 
@@ -677,7 +677,7 @@ describe('Naver list import', () => {
       ok: true,
       json: async () => ({
         folder: { name: 'Seoul', bookmarkCount: 1 },
-        bookmarkList: [{ name: 'Gyeongbokgung', px: 126.9770, py: 37.5796, memo: null, address: 'Sejongno Seoul' }],
+        bookmarkList: [{ name: 'Gyeongbokgung', px: 126.977, py: 37.5796, memo: null, address: 'Sejongno Seoul' }],
       }),
     });
 
@@ -716,9 +716,7 @@ describe('GPX Import', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    const res = await request(app)
-      .post(`/api/trips/${trip.id}/places/import/gpx`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).post(`/api/trips/${trip.id}/places/import/gpx`).set('Cookie', authCookie(user.id));
     expect(res.status).toBe(400);
   });
 });
@@ -732,7 +730,8 @@ describe('KML/KMZ Import', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    testDb.prepare('INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)')
+    testDb
+      .prepare('INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)')
       .run('Museums', '#3b82f6', 'Landmark', user.id);
 
     const res = await request(app)
@@ -758,7 +757,8 @@ describe('KML/KMZ Import', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    testDb.prepare('INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)')
+    testDb
+      .prepare('INSERT INTO categories (name, color, icon, user_id) VALUES (?, ?, ?, ?)')
       .run('Parks', '#22c55e', 'Trees', user.id);
 
     const res = await request(app)
@@ -800,7 +800,9 @@ describe('KML/KMZ Import', () => {
 
     const prefix = Buffer.from('<?xml version="1.0"?><kml><Document><Placemark><name>Caf');
     const invalidByte = Buffer.from([0xe9]); // invalid UTF-8 sequence when used standalone
-    const suffix = Buffer.from('</name><Point><coordinates>2.1,48.1,0</coordinates></Point></Placemark></Document></kml>');
+    const suffix = Buffer.from(
+      '</name><Point><coordinates>2.1,48.1,0</coordinates></Point></Placemark></Document></kml>',
+    );
     const nonUtf8Kml = Buffer.concat([prefix, invalidByte, suffix]);
 
     const res = await request(app)
@@ -853,8 +855,7 @@ describe('GPX Import — edge cases', () => {
 
     // Minimal valid GPX with no waypoints, tracks, or routes
     const emptyGpx = Buffer.from(
-      '<?xml version="1.0" encoding="UTF-8"?>' +
-      '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"></gpx>'
+      '<?xml version="1.0" encoding="UTF-8"?>' + '<gpx version="1.1" xmlns="http://www.topografix.com/GPX/1/1"></gpx>',
     );
 
     const res = await request(app)
@@ -1011,9 +1012,7 @@ describe('Delete place — not found', () => {
     const { user } = createUser(testDb);
     const trip = createTrip(testDb, user.id);
 
-    const res = await request(app)
-      .delete(`/api/trips/${trip.id}/places/99999`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).delete(`/api/trips/${trip.id}/places/99999`).set('Cookie', authCookie(user.id));
     expect(res.status).toBe(404);
   });
 });

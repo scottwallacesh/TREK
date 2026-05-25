@@ -2,6 +2,22 @@
  * Unit tests for backupService.
  * Covers BACKUP-031 to BACKUP-060.
  */
+import {
+  formatSize,
+  parseIntField,
+  parseAutoBackupBody,
+  isValidBackupFilename,
+  checkRateLimit,
+  createBackup,
+  deleteBackup,
+  restoreFromZip,
+  BACKUP_RATE_WINDOW,
+  backupFilePath,
+  backupFileExists,
+  listBackups,
+  updateAutoSettings,
+} from '../../../src/services/backupService';
+
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 
 // ---------------------------------------------------------------------------
@@ -69,22 +85,6 @@ vi.mock('../../../src/scheduler', () => ({
   saveSettings: vi.fn(),
   start: vi.fn(),
 }));
-
-import {
-  formatSize,
-  parseIntField,
-  parseAutoBackupBody,
-  isValidBackupFilename,
-  checkRateLimit,
-  createBackup,
-  deleteBackup,
-  restoreFromZip,
-  BACKUP_RATE_WINDOW,
-  backupFilePath,
-  backupFileExists,
-  listBackups,
-  updateAutoSettings,
-} from '../../../src/services/backupService';
 
 // ---------------------------------------------------------------------------
 // formatSize
@@ -341,7 +341,9 @@ describe('BACKUP-036 createBackup', () => {
 
   it('BACKUP-036b — WAL checkpoint error is swallowed (non-critical)', async () => {
     // db.exec throws on WAL checkpoint
-    dbMock.db.exec.mockImplementationOnce(() => { throw new Error('WAL checkpoint failed'); });
+    dbMock.db.exec.mockImplementationOnce(() => {
+      throw new Error('WAL checkpoint failed');
+    });
 
     const writableEvents: Record<string, Function> = {};
     const fakeWriteStream = {
@@ -432,10 +434,7 @@ describe('BACKUP-036 createBackup', () => {
     await createBackup();
 
     // archive.file should have been called with the db path
-    expect(archiverInstanceMock.file).toHaveBeenCalledWith(
-      expect.stringContaining('travel.db'),
-      { name: 'travel.db' }
-    );
+    expect(archiverInstanceMock.file).toHaveBeenCalledWith(expect.stringContaining('travel.db'), { name: 'travel.db' });
   });
 
   it('BACKUP-036e — includes uploads directory when it exists', async () => {
@@ -464,10 +463,7 @@ describe('BACKUP-036 createBackup', () => {
 
     await createBackup();
 
-    expect(archiverInstanceMock.directory).toHaveBeenCalledWith(
-      expect.stringContaining('uploads'),
-      'uploads'
-    );
+    expect(archiverInstanceMock.directory).toHaveBeenCalledWith(expect.stringContaining('uploads'), 'uploads');
   });
 });
 
@@ -486,9 +482,7 @@ describe('BACKUP-037 deleteBackup', () => {
     deleteBackup('backup-2026-04-06T12-00-00.zip');
 
     expect(fsMock.unlinkSync).toHaveBeenCalledOnce();
-    expect(fsMock.unlinkSync).toHaveBeenCalledWith(
-      expect.stringContaining('backup-2026-04-06T12-00-00.zip')
-    );
+    expect(fsMock.unlinkSync).toHaveBeenCalledWith(expect.stringContaining('backup-2026-04-06T12-00-00.zip'));
   });
 
   it('BACKUP-037b — throws when unlinkSync throws (file not found)', () => {
@@ -565,9 +559,7 @@ describe('BACKUP-040 backupFileExists', () => {
   it('BACKUP-040a — returns true when existsSync returns true', () => {
     fsMock.existsSync.mockReturnValue(true);
     expect(backupFileExists('backup-2026-01-01T00-00-00.zip')).toBe(true);
-    expect(fsMock.existsSync).toHaveBeenCalledWith(
-      expect.stringContaining('backup-2026-01-01T00-00-00.zip')
-    );
+    expect(fsMock.existsSync).toHaveBeenCalledWith(expect.stringContaining('backup-2026-01-01T00-00-00.zip'));
   });
 
   it('BACKUP-040b — returns false when existsSync returns false', () => {
@@ -609,10 +601,7 @@ describe('BACKUP-041 listBackups', () => {
   });
 
   it('BACKUP-041c — sorts results newest-first', () => {
-    fsMock.readdirSync.mockReturnValue([
-      'backup-2026-01-01T00-00-00.zip',
-      'backup-2026-06-01T00-00-00.zip',
-    ]);
+    fsMock.readdirSync.mockReturnValue(['backup-2026-01-01T00-00-00.zip', 'backup-2026-06-01T00-00-00.zip']);
     fsMock.statSync.mockImplementation((p: string) => {
       if (String(p).includes('2026-01-01')) {
         return { size: 512, mtime: new Date('2026-01-01T00:00:00Z') };
@@ -628,11 +617,7 @@ describe('BACKUP-041 listBackups', () => {
   });
 
   it('BACKUP-041d — filters out non-.zip files', () => {
-    fsMock.readdirSync.mockReturnValue([
-      'backup-2026-01-01T00-00-00.zip',
-      'README.txt',
-      'backup-partial.tar.gz',
-    ]);
+    fsMock.readdirSync.mockReturnValue(['backup-2026-01-01T00-00-00.zip', 'README.txt', 'backup-partial.tar.gz']);
     fsMock.statSync.mockReturnValue({
       size: 1024,
       mtime: new Date('2026-01-01T00:00:00Z'),
@@ -666,9 +651,7 @@ describe('BACKUP-042 restoreFromZip — integrity check fails', () => {
   it('BACKUP-042a — returns status 400 with integrity check error message', async () => {
     setupSuccessfulExtraction();
 
-    fsMock.existsSync.mockImplementation((p: string) =>
-      String(p).endsWith('travel.db')
-    );
+    fsMock.existsSync.mockImplementation((p: string) => String(p).endsWith('travel.db'));
     fsMock.rmSync.mockReturnValue(undefined);
 
     const fakeDbInstance = {
@@ -697,13 +680,12 @@ describe('BACKUP-043 restoreFromZip — missing required table', () => {
   it('BACKUP-043a — returns status 400 with missing required table error', async () => {
     setupSuccessfulExtraction();
 
-    fsMock.existsSync.mockImplementation((p: string) =>
-      String(p).endsWith('travel.db')
-    );
+    fsMock.existsSync.mockImplementation((p: string) => String(p).endsWith('travel.db'));
     fsMock.rmSync.mockReturnValue(undefined);
 
     const fakeDbInstance = {
-      prepare: vi.fn()
+      prepare: vi
+        .fn()
         .mockReturnValueOnce({
           get: vi.fn().mockReturnValue({ integrity_check: 'ok' }),
         })
@@ -731,9 +713,7 @@ describe('BACKUP-044 restoreFromZip — Database constructor throws (invalid SQL
   it('BACKUP-044a — returns status 400 with "not a valid SQLite database" error', async () => {
     setupSuccessfulExtraction();
 
-    fsMock.existsSync.mockImplementation((p: string) =>
-      String(p).endsWith('travel.db')
-    );
+    fsMock.existsSync.mockImplementation((p: string) => String(p).endsWith('travel.db'));
     fsMock.rmSync.mockReturnValue(undefined);
 
     DatabaseMock.mockImplementation(() => {
@@ -756,18 +736,21 @@ describe('BACKUP-045 restoreFromZip — full success path (no uploads)', () => {
 
   function setupAllTablesPresent() {
     const fakeDbInstance = {
-      prepare: vi.fn()
+      prepare: vi
+        .fn()
         .mockReturnValueOnce({
           get: vi.fn().mockReturnValue({ integrity_check: 'ok' }),
         })
         .mockReturnValueOnce({
-          all: vi.fn().mockReturnValue([
-            { name: 'users' },
-            { name: 'trips' },
-            { name: 'trip_members' },
-            { name: 'places' },
-            { name: 'days' },
-          ]),
+          all: vi
+            .fn()
+            .mockReturnValue([
+              { name: 'users' },
+              { name: 'trips' },
+              { name: 'trip_members' },
+              { name: 'places' },
+              { name: 'days' },
+            ]),
         }),
       close: vi.fn(),
     };
@@ -798,8 +781,12 @@ describe('BACKUP-045 restoreFromZip — full success path (no uploads)', () => {
     setupAllTablesPresent();
 
     const callOrder: string[] = [];
-    dbMock.closeDb.mockImplementation(() => { callOrder.push('closeDb'); });
-    fsMock.copyFileSync.mockImplementation(() => { callOrder.push('copyFileSync'); });
+    dbMock.closeDb.mockImplementation(() => {
+      callOrder.push('closeDb');
+    });
+    fsMock.copyFileSync.mockImplementation(() => {
+      callOrder.push('copyFileSync');
+    });
     fsMock.unlinkSync.mockReturnValue(undefined);
     fsMock.rmSync.mockReturnValue(undefined);
 
@@ -844,18 +831,21 @@ describe('BACKUP-046 restoreFromZip — with uploads directory', () => {
     setupSuccessfulExtraction();
 
     const fakeDbInstance = {
-      prepare: vi.fn()
+      prepare: vi
+        .fn()
         .mockReturnValueOnce({
           get: vi.fn().mockReturnValue({ integrity_check: 'ok' }),
         })
         .mockReturnValueOnce({
-          all: vi.fn().mockReturnValue([
-            { name: 'users' },
-            { name: 'trips' },
-            { name: 'trip_members' },
-            { name: 'places' },
-            { name: 'days' },
-          ]),
+          all: vi
+            .fn()
+            .mockReturnValue([
+              { name: 'users' },
+              { name: 'trips' },
+              { name: 'trip_members' },
+              { name: 'places' },
+              { name: 'days' },
+            ]),
         }),
       close: vi.fn(),
     };
@@ -883,11 +873,10 @@ describe('BACKUP-046 restoreFromZip — with uploads directory', () => {
 
     await restoreFromZip('/data/tmp/upload.zip');
 
-    expect(fsMock.cpSync).toHaveBeenCalledWith(
-      expect.stringContaining('uploads'),
-      expect.stringContaining('uploads'),
-      { recursive: true, force: true }
-    );
+    expect(fsMock.cpSync).toHaveBeenCalledWith(expect.stringContaining('uploads'), expect.stringContaining('uploads'), {
+      recursive: true,
+      force: true,
+    });
   });
 });
 
@@ -908,7 +897,7 @@ describe('BACKUP-047 updateAutoSettings', () => {
 
     expect(schedulerMock.saveSettings).toHaveBeenCalledOnce();
     expect(schedulerMock.saveSettings).toHaveBeenCalledWith(
-      expect.objectContaining({ enabled: true, interval: 'weekly', hour: 6 })
+      expect.objectContaining({ enabled: true, interval: 'weekly', hour: 6 }),
     );
   });
 

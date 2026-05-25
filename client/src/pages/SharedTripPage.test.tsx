@@ -1,16 +1,14 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor, fireEvent } from '../../tests/helpers/render';
-import { Routes, Route } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
+import { Route, Routes } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { server } from '../../tests/helpers/msw/server';
+import { fireEvent, render, screen, waitFor } from '../../tests/helpers/render';
 import { resetAllStores } from '../../tests/helpers/store';
 import SharedTripPage from './SharedTripPage';
 
 // Mock react-leaflet (SharedTripPage renders a map)
 vi.mock('react-leaflet', () => ({
-  MapContainer: ({ children }: { children: React.ReactNode }) => (
-    <div data-testid="map-container">{children}</div>
-  ),
+  MapContainer: ({ children }: { children: React.ReactNode }) => <div data-testid="map-container">{children}</div>,
   TileLayer: () => null,
   Marker: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
   Tooltip: ({ children }: { children?: React.ReactNode }) => <div>{children}</div>,
@@ -43,7 +41,7 @@ function renderSharedTrip(token: string) {
     <Routes>
       <Route path="/shared/:token" element={<SharedTripPage />} />
     </Routes>,
-    { initialEntries: [`/shared/${token}`] },
+    { initialEntries: [`/shared/${token}`] }
   );
 }
 
@@ -59,9 +57,9 @@ describe('SharedTripPage', () => {
       // Use a token that will delay or we just check initial state before response
       server.use(
         http.get('/api/shared/:token', async () => {
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 200));
           return HttpResponse.json({ trips: [] });
-        }),
+        })
       );
 
       renderSharedTrip('test-token');
@@ -185,7 +183,7 @@ describe('SharedTripPage', () => {
             permissions: { share_bookings: false, share_packing: true, share_budget: false, share_collab: false },
             collab: [],
           });
-        }),
+        })
       );
 
       renderSharedTrip('packing-token');
@@ -211,7 +209,13 @@ describe('SharedTripPage', () => {
         http.get('/api/shared/:token', ({ params }) => {
           if (params.token !== 'budget-token') return;
           return HttpResponse.json({
-            trip: { id: 1, title: 'Shared Paris Trip', start_date: '2026-07-01', end_date: '2026-07-05', currency: 'EUR' },
+            trip: {
+              id: 1,
+              title: 'Shared Paris Trip',
+              start_date: '2026-07-01',
+              end_date: '2026-07-05',
+              currency: 'EUR',
+            },
             days: [],
             assignments: {},
             dayNotes: {},
@@ -224,7 +228,7 @@ describe('SharedTripPage', () => {
             permissions: { share_bookings: false, share_packing: false, share_budget: true, share_collab: false },
             collab: [],
           });
-        }),
+        })
       );
 
       renderSharedTrip('budget-token');
@@ -262,9 +266,11 @@ describe('SharedTripPage', () => {
             budget: [],
             categories: [],
             permissions: { share_bookings: false, share_packing: false, share_budget: false, share_collab: true },
-            collab: [{ id: 1, username: 'alice', text: 'Hello team!', created_at: '2025-01-01T10:00:00Z', avatar: null }],
+            collab: [
+              { id: 1, username: 'alice', text: 'Hello team!', created_at: '2025-01-01T10:00:00Z', avatar: null },
+            ],
           });
-        }),
+        })
       );
 
       renderSharedTrip('collab-token');
@@ -287,7 +293,16 @@ describe('SharedTripPage', () => {
   describe('FE-PAGE-SHARED-013: Day card expands when clicked', () => {
     it('reveals place names after clicking a collapsed day card header', async () => {
       const day = { id: 101, trip_id: 1, day_number: 1, date: '2026-07-01', title: 'Day One', notes: null };
-      const place = { id: 201, trip_id: 1, name: 'Eiffel Tower', lat: 48.8584, lng: 2.2945, category_id: null, image_url: null, address: null };
+      const place = {
+        id: 201,
+        trip_id: 1,
+        name: 'Eiffel Tower',
+        lat: 48.8584,
+        lng: 2.2945,
+        category_id: null,
+        image_url: null,
+        address: null,
+      };
 
       server.use(
         http.get('/api/shared/:token', ({ params }) => {
@@ -308,7 +323,7 @@ describe('SharedTripPage', () => {
             permissions: { share_bookings: false, share_packing: false, share_budget: false, share_collab: false },
             collab: [],
           });
-        }),
+        })
       );
 
       renderSharedTrip('expand-token');
@@ -380,7 +395,14 @@ describe('SharedTripPage', () => {
             dayNotes: {},
             places: [],
             reservations: [
-              { id: 1, title: 'Flight to Paris', type: 'flight', status: 'confirmed', reservation_time: '2026-07-01T10:00:00', metadata: '{}' },
+              {
+                id: 1,
+                title: 'Flight to Paris',
+                type: 'flight',
+                status: 'confirmed',
+                reservation_time: '2026-07-01T10:00:00',
+                metadata: '{}',
+              },
             ],
             accommodations: [],
             packing: [],
@@ -389,7 +411,7 @@ describe('SharedTripPage', () => {
             permissions: { share_bookings: true, share_packing: false, share_budget: false, share_collab: false },
             collab: [],
           });
-        }),
+        })
       );
 
       renderSharedTrip('bookings-token');

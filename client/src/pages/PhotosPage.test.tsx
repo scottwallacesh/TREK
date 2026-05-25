@@ -1,19 +1,28 @@
-import React from 'react';
-import { describe, it, expect, beforeEach, vi } from 'vitest';
-import { render, screen, waitFor, act } from '../../tests/helpers/render';
-import { Route, Routes } from 'react-router-dom';
 import { http, HttpResponse } from 'msw';
+import React from 'react';
+import { Route, Routes } from 'react-router-dom';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { buildTrip, buildUser } from '../../tests/helpers/factories';
 import { server } from '../../tests/helpers/msw/server';
+import { act, render, screen, waitFor } from '../../tests/helpers/render';
 import { resetAllStores, seedStore } from '../../tests/helpers/store';
-import { buildUser, buildTrip } from '../../tests/helpers/factories';
 import { useAuthStore } from '../store/authStore';
 import { useTripStore } from '../store/tripStore';
-import PhotosPage from './PhotosPage';
 import type { Photo } from '../types';
+import PhotosPage from './PhotosPage';
 
 vi.mock('../components/Photos/PhotoGallery', () => ({
-  default: ({ photos }: { photos: Photo[]; onUpload: unknown; onDelete: unknown; onUpdate: unknown; places: unknown[]; days: unknown[]; tripId: unknown }) =>
-    React.createElement('div', { 'data-testid': 'photo-gallery' }, `${photos.length} photos`),
+  default: ({
+    photos,
+  }: {
+    photos: Photo[];
+    onUpload: unknown;
+    onDelete: unknown;
+    onUpdate: unknown;
+    places: unknown[];
+    days: unknown[];
+    tripId: unknown;
+  }) => React.createElement('div', { 'data-testid': 'photo-gallery' }, `${photos.length} photos`),
 }));
 
 vi.mock('../components/Layout/Navbar', () => ({
@@ -42,7 +51,7 @@ function renderPhotosPage(tripId: number | string = 1) {
     <Routes>
       <Route path="/trips/:id/photos" element={<PhotosPage />} />
     </Routes>,
-    { initialEntries: [`/trips/${tripId}/photos`] },
+    { initialEntries: [`/trips/${tripId}/photos`] }
   );
 }
 
@@ -64,10 +73,10 @@ describe('PhotosPage', () => {
     it('shows a spinner while data is loading', async () => {
       server.use(
         http.get('/api/trips/:id', async () => {
-          await new Promise(resolve => setTimeout(resolve, 200));
+          await new Promise((resolve) => setTimeout(resolve, 200));
           const trip = buildTrip({ id: 1 });
           return HttpResponse.json({ trip });
-        }),
+        })
       );
 
       renderPhotosPage(1);
@@ -79,9 +88,7 @@ describe('PhotosPage', () => {
   describe('FE-PAGE-PHOTOS-002: Trip name in Navbar after load', () => {
     it('passes the trip name to Navbar after data loads', async () => {
       const trip = buildTrip({ id: 1, name: 'Venice Trip' });
-      server.use(
-        http.get('/api/trips/:id', () => HttpResponse.json({ trip })),
-      );
+      server.use(http.get('/api/trips/:id', () => HttpResponse.json({ trip })));
 
       renderPhotosPage(1);
 
@@ -156,18 +163,14 @@ describe('PhotosPage', () => {
 
   describe('FE-PAGE-PHOTOS-007: Navigation to /dashboard on fetch error', () => {
     it('navigates to /dashboard when trip fetch fails', async () => {
-      server.use(
-        http.get('/api/trips/:id', () =>
-          HttpResponse.json({ error: 'Not found' }, { status: 404 }),
-        ),
-      );
+      server.use(http.get('/api/trips/:id', () => HttpResponse.json({ error: 'Not found' }, { status: 404 })));
 
       render(
         <Routes>
           <Route path="/trips/:id/photos" element={<PhotosPage />} />
           <Route path="/dashboard" element={<div data-testid="dashboard">Dashboard</div>} />
         </Routes>,
-        { initialEntries: ['/trips/1/photos'] },
+        { initialEntries: ['/trips/1/photos'] }
       );
 
       await waitFor(() => {

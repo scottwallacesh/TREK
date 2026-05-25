@@ -1,6 +1,7 @@
-import { describe, it, expect, vi } from 'vitest';
-import { HttpException } from '@nestjs/common';
 import { TrekExceptionFilter } from '../../../src/nest/common/trek-exception.filter';
+import { HttpException } from '@nestjs/common';
+
+import { describe, it, expect, vi } from 'vitest';
 
 function mockHost() {
   const res = { status: vi.fn().mockReturnThis(), json: vi.fn().mockReturnThis() };

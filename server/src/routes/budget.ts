@@ -1,9 +1,5 @@
-import express, { Request, Response } from 'express';
-import { authenticate } from '../middleware/auth';
-import { broadcast } from '../websocket';
-import { checkPermission } from '../services/permissions';
-import { AuthRequest } from '../types';
 import { db } from '../db/database';
+import { authenticate } from '../middleware/auth';
 import {
   verifyTripAccess,
   listBudgetItems,
@@ -17,6 +13,11 @@ import {
   reorderBudgetItems,
   reorderBudgetCategories,
 } from '../services/budgetService';
+import { checkPermission } from '../services/permissions';
+import { AuthRequest } from '../types';
+import { broadcast } from '../websocket';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router({ mergeParams: true });
 
@@ -34,8 +35,7 @@ router.get('/summary/per-person', authenticate, (req: Request, res: Response) =>
   const authReq = req as AuthRequest;
   const { tripId } = req.params;
 
-  if (!verifyTripAccess(Number(tripId), authReq.user.id))
-    return res.status(404).json({ error: 'Trip not found' });
+  if (!verifyTripAccess(Number(tripId), authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
 
   res.json({ summary: getPerPersonSummary(tripId) });
 });
@@ -47,7 +47,9 @@ router.post('/', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const { name } = req.body;
@@ -66,7 +68,9 @@ router.put('/reorder/items', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   reorderBudgetItems(tripId, orderedIds);
@@ -82,7 +86,9 @@ router.put('/reorder/categories', authenticate, (req: Request, res: Response) =>
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   reorderBudgetCategories(tripId, orderedCategories);
@@ -97,7 +103,9 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const updated = updateBudgetItem(id, tripId, req.body);
@@ -106,7 +114,9 @@ router.put('/:id', authenticate, (req: Request, res: Response) => {
   // Sync price back to linked reservation
   if (updated.reservation_id && req.body.total_price !== undefined) {
     try {
-      const reservation = db.prepare('SELECT id, metadata FROM reservations WHERE id = ? AND trip_id = ?').get(updated.reservation_id, tripId) as { id: number; metadata: string | null } | undefined;
+      const reservation = db
+        .prepare('SELECT id, metadata FROM reservations WHERE id = ? AND trip_id = ?')
+        .get(updated.reservation_id, tripId) as { id: number; metadata: string | null } | undefined;
       if (reservation) {
         const meta = reservation.metadata ? JSON.parse(reservation.metadata) : {};
         meta.price = String(updated.total_price);
@@ -130,7 +140,15 @@ router.put('/:id/members', authenticate, (req: Request, res: Response) => {
   const access = verifyTripAccess(Number(tripId), authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('budget_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'budget_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const { user_ids } = req.body;
@@ -140,7 +158,12 @@ router.put('/:id/members', authenticate, (req: Request, res: Response) => {
   if (!result) return res.status(404).json({ error: 'Budget item not found' });
 
   res.json({ members: result.members, item: result.item });
-  broadcast(Number(tripId), 'budget:members-updated', { itemId: Number(id), members: result.members, persons: result.item.persons }, req.headers['x-socket-id'] as string);
+  broadcast(
+    Number(tripId),
+    'budget:members-updated',
+    { itemId: Number(id), members: result.members, persons: result.item.persons },
+    req.headers['x-socket-id'] as string,
+  );
 });
 
 router.put('/:id/members/:userId/paid', authenticate, (req: Request, res: Response) => {
@@ -150,21 +173,33 @@ router.put('/:id/members/:userId/paid', authenticate, (req: Request, res: Respon
   const access = verifyTripAccess(Number(tripId), authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('budget_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'budget_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const { paid } = req.body;
   const member = toggleMemberPaid(id, userId, paid);
   res.json({ member });
-  broadcast(Number(tripId), 'budget:member-paid-updated', { itemId: Number(id), userId: Number(userId), paid: paid ? 1 : 0 }, req.headers['x-socket-id'] as string);
+  broadcast(
+    Number(tripId),
+    'budget:member-paid-updated',
+    { itemId: Number(id), userId: Number(userId), paid: paid ? 1 : 0 },
+    req.headers['x-socket-id'] as string,
+  );
 });
 
 router.get('/settlement', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { tripId } = req.params;
 
-  if (!verifyTripAccess(Number(tripId), authReq.user.id))
-    return res.status(404).json({ error: 'Trip not found' });
+  if (!verifyTripAccess(Number(tripId), authReq.user.id)) return res.status(404).json({ error: 'Trip not found' });
 
   res.json(calculateSettlement(tripId));
 });
@@ -176,11 +211,12 @@ router.delete('/:id', authenticate, (req: Request, res: Response) => {
   const trip = verifyTripAccess(tripId, authReq.user.id);
   if (!trip) return res.status(404).json({ error: 'Trip not found' });
 
-  if (!checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id))
+  if (
+    !checkPermission('budget_edit', authReq.user.role, trip.user_id, authReq.user.id, trip.user_id !== authReq.user.id)
+  )
     return res.status(403).json({ error: 'No permission' });
 
-  if (!deleteBudgetItem(id, tripId))
-    return res.status(404).json({ error: 'Budget item not found' });
+  if (!deleteBudgetItem(id, tripId)) return res.status(404).json({ error: 'Budget item not found' });
 
   res.json({ success: true });
   broadcast(tripId, 'budget:deleted', { itemId: Number(id) }, req.headers['x-socket-id'] as string);

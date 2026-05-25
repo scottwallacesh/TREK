@@ -1,15 +1,6 @@
-import express, { Request, Response } from 'express';
-import multer from 'multer';
-import path from 'path';
-import fs from 'fs';
-import { v4 as uuidv4 } from 'uuid';
-import { authenticate } from '../middleware/auth';
-import { broadcast } from '../websocket';
-import { validateStringLengths } from '../middleware/validate';
-import { checkPermission } from '../services/permissions';
-import { AuthRequest } from '../types';
 import { db } from '../db/database';
-import { BLOCKED_EXTENSIONS } from '../services/fileService';
+import { authenticate } from '../middleware/auth';
+import { validateStringLengths } from '../middleware/validate';
 import {
   verifyTripAccess,
   listNotes,
@@ -30,13 +21,28 @@ import {
   addOrRemoveReaction,
   fetchLinkPreview,
 } from '../services/collabService';
+import { BLOCKED_EXTENSIONS } from '../services/fileService';
+import { checkPermission } from '../services/permissions';
+import { AuthRequest } from '../types';
+import { broadcast } from '../websocket';
+
+import express, { Request, Response } from 'express';
+import fs from 'fs';
+import multer from 'multer';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 const MAX_NOTE_FILE_SIZE = 50 * 1024 * 1024; // 50 MB
 const filesDir = path.join(__dirname, '../../uploads/files');
 const noteUpload = multer({
   storage: multer.diskStorage({
-    destination: (_req, _file, cb) => { if (!fs.existsSync(filesDir)) fs.mkdirSync(filesDir, { recursive: true }); cb(null, filesDir) },
-    filename: (_req, file, cb) => { cb(null, `${uuidv4()}${path.extname(file.originalname)}`) },
+    destination: (_req, _file, cb) => {
+      if (!fs.existsSync(filesDir)) fs.mkdirSync(filesDir, { recursive: true });
+      cb(null, filesDir);
+    },
+    filename: (_req, file, cb) => {
+      cb(null, `${uuidv4()}${path.extname(file.originalname)}`);
+    },
   }),
   limits: { fileSize: MAX_NOTE_FILE_SIZE },
   defParamCharset: 'utf8',
@@ -45,7 +51,12 @@ const noteUpload = multer({
     // Share the single BLOCKED_EXTENSIONS list from fileService so
     // executable/script attachments can't sneak in via collab when the
     // main uploader already rejects them.
-    if (BLOCKED_EXTENSIONS.includes(ext) || file.mimetype.includes('svg') || file.mimetype.includes('html') || file.mimetype.includes('javascript')) {
+    if (
+      BLOCKED_EXTENSIONS.includes(ext) ||
+      file.mimetype.includes('svg') ||
+      file.mimetype.includes('html') ||
+      file.mimetype.includes('javascript')
+    ) {
       const err: Error & { statusCode?: number } = new Error('File type not allowed');
       err.statusCode = 400;
       return cb(err);
@@ -74,7 +85,15 @@ router.post('/notes', authenticate, (req: Request, res: Response) => {
   const { title, content, category, color, website } = req.body;
   const access = verifyTripAccess(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('collab_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'collab_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
   if (!title) return res.status(400).json({ error: 'Title is required' });
 
@@ -84,7 +103,13 @@ router.post('/notes', authenticate, (req: Request, res: Response) => {
 
   import('../services/notificationService').then(({ send }) => {
     const tripInfo = db.prepare('SELECT title FROM trips WHERE id = ?').get(tripId) as { title: string } | undefined;
-    send({ event: 'collab_message', actorId: authReq.user.id, scope: 'trip', targetId: Number(tripId), params: { trip: tripInfo?.title || 'Untitled', actor: authReq.user.email, tripId: String(tripId) } }).catch(() => {});
+    send({
+      event: 'collab_message',
+      actorId: authReq.user.id,
+      scope: 'trip',
+      targetId: Number(tripId),
+      params: { trip: tripInfo?.title || 'Untitled', actor: authReq.user.email, tripId: String(tripId) },
+    }).catch(() => {});
   });
 });
 
@@ -94,7 +119,15 @@ router.put('/notes/:id', authenticate, (req: Request, res: Response) => {
   const { title, content, category, color, pinned, website } = req.body;
   const access = verifyTripAccess(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('collab_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'collab_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const formatted = updateNote(tripId, id, { title, content, category, color, pinned, website });
@@ -109,7 +142,15 @@ router.delete('/notes/:id', authenticate, (req: Request, res: Response) => {
   const { tripId, id } = req.params;
   const access = verifyTripAccess(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('collab_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'collab_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   if (!deleteNote(tripId, id)) return res.status(404).json({ error: 'Note not found' });
@@ -127,7 +168,15 @@ router.post('/notes/:id/files', authenticate, noteUpload.single('file'), (req: R
   const { tripId, id } = req.params;
   const access = verifyTripAccess(Number(tripId), authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('file_upload', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'file_upload',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission to upload files' });
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
 
@@ -135,7 +184,12 @@ router.post('/notes/:id/files', authenticate, noteUpload.single('file'), (req: R
   if (!result) return res.status(404).json({ error: 'Note not found' });
 
   res.status(201).json(result);
-  broadcast(Number(tripId), 'collab:note:updated', { note: getFormattedNoteById(id) }, req.headers['x-socket-id'] as string);
+  broadcast(
+    Number(tripId),
+    'collab:note:updated',
+    { note: getFormattedNoteById(id) },
+    req.headers['x-socket-id'] as string,
+  );
 });
 
 router.delete('/notes/:id/files/:fileId', authenticate, (req: Request, res: Response) => {
@@ -143,13 +197,26 @@ router.delete('/notes/:id/files/:fileId', authenticate, (req: Request, res: Resp
   const { tripId, id, fileId } = req.params;
   const access = verifyTripAccess(Number(tripId), authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('collab_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'collab_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   if (!deleteNoteFile(id, fileId)) return res.status(404).json({ error: 'File not found' });
 
   res.json({ success: true });
-  broadcast(Number(tripId), 'collab:note:updated', { note: getFormattedNoteById(id) }, req.headers['x-socket-id'] as string);
+  broadcast(
+    Number(tripId),
+    'collab:note:updated',
+    { note: getFormattedNoteById(id) },
+    req.headers['x-socket-id'] as string,
+  );
 });
 
 /* ------------------------------------------------------------------ */
@@ -170,7 +237,15 @@ router.post('/polls', authenticate, (req: Request, res: Response) => {
   const { question, options, multiple, multiple_choice, deadline } = req.body;
   const access = verifyTripAccess(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('collab_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'collab_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
   if (!question) return res.status(400).json({ error: 'Question is required' });
   if (!Array.isArray(options) || options.length < 2) {
@@ -188,7 +263,15 @@ router.post('/polls/:id/vote', authenticate, (req: Request, res: Response) => {
   const { option_index } = req.body;
   const access = verifyTripAccess(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('collab_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'collab_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const result = votePoll(tripId, id, authReq.user.id, option_index);
@@ -205,7 +288,15 @@ router.put('/polls/:id/close', authenticate, (req: Request, res: Response) => {
   const { tripId, id } = req.params;
   const access = verifyTripAccess(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('collab_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'collab_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const updatedPoll = closePoll(tripId, id);
@@ -220,7 +311,15 @@ router.delete('/polls/:id', authenticate, (req: Request, res: Response) => {
   const { tripId, id } = req.params;
   const access = verifyTripAccess(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('collab_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'collab_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   if (!deletePoll(tripId, id)) return res.status(404).json({ error: 'Poll not found' });
@@ -248,7 +347,15 @@ router.post('/messages', authenticate, validateStringLengths({ text: 5000 }), (r
   const { text, reply_to } = req.body;
   const access = verifyTripAccess(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('collab_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'collab_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
   if (!text || !text.trim()) return res.status(400).json({ error: 'Message text is required' });
 
@@ -262,7 +369,13 @@ router.post('/messages', authenticate, validateStringLengths({ text: 5000 }), (r
   import('../services/notificationService').then(({ send }) => {
     const tripInfo = db.prepare('SELECT title FROM trips WHERE id = ?').get(tripId) as { title: string } | undefined;
     const preview = text.trim().length > 80 ? text.trim().substring(0, 80) + '...' : text.trim();
-    send({ event: 'collab_message', actorId: authReq.user.id, scope: 'trip', targetId: Number(tripId), params: { trip: tripInfo?.title || 'Untitled', actor: authReq.user.email, preview, tripId: String(tripId) } }).catch(() => {});
+    send({
+      event: 'collab_message',
+      actorId: authReq.user.id,
+      scope: 'trip',
+      targetId: Number(tripId),
+      params: { trip: tripInfo?.title || 'Untitled', actor: authReq.user.email, preview, tripId: String(tripId) },
+    }).catch(() => {});
   });
 });
 
@@ -276,7 +389,15 @@ router.post('/messages/:id/react', authenticate, (req: Request, res: Response) =
   const { emoji } = req.body;
   const access = verifyTripAccess(Number(tripId), authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('collab_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'collab_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
   if (!emoji) return res.status(400).json({ error: 'Emoji is required' });
 
@@ -284,7 +405,12 @@ router.post('/messages/:id/react', authenticate, (req: Request, res: Response) =
   if (!result.found) return res.status(404).json({ error: 'Message not found' });
 
   res.json({ reactions: result.reactions });
-  broadcast(Number(tripId), 'collab:message:reacted', { messageId: Number(id), reactions: result.reactions }, req.headers['x-socket-id'] as string);
+  broadcast(
+    Number(tripId),
+    'collab:message:reacted',
+    { messageId: Number(id), reactions: result.reactions },
+    req.headers['x-socket-id'] as string,
+  );
 });
 
 /* ------------------------------------------------------------------ */
@@ -296,7 +422,15 @@ router.delete('/messages/:id', authenticate, (req: Request, res: Response) => {
   const { tripId, id } = req.params;
   const access = verifyTripAccess(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('collab_edit', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'collab_edit',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const result = deleteMessage(tripId, id, authReq.user.id);
@@ -304,7 +438,12 @@ router.delete('/messages/:id', authenticate, (req: Request, res: Response) => {
   if (result.error === 'not_owner') return res.status(403).json({ error: 'You can only delete your own messages' });
 
   res.json({ success: true });
-  broadcast(tripId, 'collab:message:deleted', { messageId: Number(id), username: result.username || authReq.user.username }, req.headers['x-socket-id'] as string);
+  broadcast(
+    tripId,
+    'collab:message:deleted',
+    { messageId: Number(id), username: result.username || authReq.user.username },
+    req.headers['x-socket-id'] as string,
+  );
 });
 
 /* ------------------------------------------------------------------ */

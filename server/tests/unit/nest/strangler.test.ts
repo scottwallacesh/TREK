@@ -1,5 +1,6 @@
-import { describe, it, expect, afterEach } from 'vitest';
 import { getNestPrefixes, makeNestPathMatcher } from '../../../src/nest/strangler';
+
+import { describe, it, expect, afterEach } from 'vitest';
 
 describe('strangler toggle', () => {
   const original = process.env.NEST_PREFIXES;

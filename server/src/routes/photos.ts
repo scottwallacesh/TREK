@@ -1,8 +1,9 @@
-import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
-import { AuthRequest } from '../types';
-import { streamPhoto, getPhotoInfo, resolveTrekPhoto } from '../services/memories/photoResolverService';
 import { canAccessTrekPhoto } from '../services/memories/helpersService';
+import { streamPhoto, getPhotoInfo, resolveTrekPhoto } from '../services/memories/photoResolverService';
+import { AuthRequest } from '../types';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 

@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-
 import { cookieOptions } from '../../../src/services/cookie';
+
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 
 describe('cookieOptions', () => {
   afterEach(() => {

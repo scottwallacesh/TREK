@@ -1,6 +1,4 @@
-import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
-import { AuthRequest } from '../types';
 import {
   getStats,
   getCountryPlaces,
@@ -15,6 +13,9 @@ import {
   updateBucketItem,
   deleteBucketItem,
 } from '../services/atlasService';
+import { AuthRequest } from '../types';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 router.use(authenticate);
@@ -33,7 +34,7 @@ router.get('/regions', async (req: Request, res: Response) => {
 });
 
 router.get('/regions/geo', async (req: Request, res: Response) => {
-  const countries = (req.query.countries as string || '').split(',').filter(Boolean);
+  const countries = ((req.query.countries as string) || '').split(',').filter(Boolean);
   if (countries.length === 0) return res.json({ type: 'FeatureCollection', features: [] });
   const geo = await getRegionGeo(countries);
   res.setHeader('Cache-Control', 'public, max-age=86400');

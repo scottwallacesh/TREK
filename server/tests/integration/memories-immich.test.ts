@@ -6,9 +6,25 @@
  * safeFetch is mocked to return fake Immich API responses based on URL patterns.
  * No real HTTP calls are made.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
-import request from 'supertest';
+import { createApp } from '../../src/app';
+import { runMigrations } from '../../src/db/migrations';
+import { createTables } from '../../src/db/schema';
+import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
+import { safeFetch } from '../../src/utils/ssrfGuard';
+import { authCookie } from '../helpers/auth';
+import {
+  createUser,
+  createTrip,
+  addTripMember,
+  addTripPhoto,
+  addAlbumLink,
+  setImmichCredentials,
+} from '../helpers/factories';
+import { resetTestDb } from '../helpers/test-db';
+
 import type { Application } from 'express';
+import request from 'supertest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
 // ── Hoisted DB mock ──────────────────────────────────────────────────────────
 
@@ -24,7 +40,11 @@ const { testDb, dbMock } = vi.hoisted(() => {
     reinitialize: () => {},
     getPlaceWithTags: () => null,
     canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
+      db
+        .prepare(
+          `SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`,
+        )
+        .get(userId, tripId, userId),
     isOwner: (tripId: any, userId: number) =>
       !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
@@ -49,8 +69,9 @@ vi.mock('../../src/utils/ssrfGuard', async () => {
     // /api/users/me  — used by status + test-connection
     if (u.includes('/api/users/me')) {
       return Promise.resolve({
-        ok: true, status: 200,
-        headers: { get: (h: string) => h === 'content-type' ? 'application/json' : null },
+        ok: true,
+        status: 200,
+        headers: { get: (h: string) => (h === 'content-type' ? 'application/json' : null) },
         json: () => Promise.resolve({ name: 'Test User', email: 'test@immich.local' }),
         body: null,
       });
@@ -58,7 +79,8 @@ vi.mock('../../src/utils/ssrfGuard', async () => {
     // /api/timeline/buckets — browse
     if (u.includes('/api/timeline/buckets')) {
       return Promise.resolve({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         headers: { get: () => null },
         json: () => Promise.resolve([{ timeBucket: '2024-01-01T00:00:00.000Z', count: 3 }]),
         body: null,
@@ -67,15 +89,21 @@ vi.mock('../../src/utils/ssrfGuard', async () => {
     // /api/search/metadata — search
     if (u.includes('/api/search/metadata')) {
       return Promise.resolve({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         headers: { get: () => null },
-        json: () => Promise.resolve({
-          assets: {
-            items: [
-              { id: 'asset-search-1', fileCreatedAt: '2024-06-01T10:00:00.000Z', exifInfo: { city: 'Paris', country: 'France' } },
-            ],
-          },
-        }),
+        json: () =>
+          Promise.resolve({
+            assets: {
+              items: [
+                {
+                  id: 'asset-search-1',
+                  fileCreatedAt: '2024-06-01T10:00:00.000Z',
+                  exifInfo: { city: 'Paris', country: 'France' },
+                },
+              ],
+            },
+          }),
         body: null,
       });
     }
@@ -83,57 +111,89 @@ vi.mock('../../src/utils/ssrfGuard', async () => {
     if (u.includes('/thumbnail')) {
       const imageBytes = Buffer.from('fake-thumbnail-data');
       return Promise.resolve({
-        ok: true, status: 200,
-        headers: { get: (h: string) => h === 'content-type' ? 'image/webp' : null },
-        body: new ReadableStream({ start(c) { c.enqueue(imageBytes); c.close(); } }),
+        ok: true,
+        status: 200,
+        headers: { get: (h: string) => (h === 'content-type' ? 'image/webp' : null) },
+        body: new ReadableStream({
+          start(c) {
+            c.enqueue(imageBytes);
+            c.close();
+          },
+        }),
       });
     }
     // /api/assets/:id/original — original proxy
     if (u.includes('/original')) {
       const imageBytes = Buffer.from('fake-original-data');
       return Promise.resolve({
-        ok: true, status: 200,
-        headers: { get: (h: string) => h === 'content-type' ? 'image/jpeg' : null },
-        body: new ReadableStream({ start(c) { c.enqueue(imageBytes); c.close(); } }),
+        ok: true,
+        status: 200,
+        headers: { get: (h: string) => (h === 'content-type' ? 'image/jpeg' : null) },
+        body: new ReadableStream({
+          start(c) {
+            c.enqueue(imageBytes);
+            c.close();
+          },
+        }),
       });
     }
     // /api/assets/:id — asset info
     if (/\/api\/assets\/[^/]+$/.test(u)) {
       return Promise.resolve({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         headers: { get: () => null },
-        json: () => Promise.resolve({
-          id: 'asset-info-1',
-          fileCreatedAt: '2024-06-01T10:00:00.000Z',
-          originalFileName: 'photo.jpg',
-          exifInfo: {
-            exifImageWidth: 4032, exifImageHeight: 3024,
-            make: 'Apple', model: 'iPhone 15',
-            lensModel: null, focalLength: 5.1, fNumber: 1.8,
-            exposureTime: '1/500', iso: 100,
-            city: 'Paris', state: 'Île-de-France', country: 'France',
-            latitude: 48.8566, longitude: 2.3522,
-            fileSizeInByte: 2048000,
-          },
-        }),
+        json: () =>
+          Promise.resolve({
+            id: 'asset-info-1',
+            fileCreatedAt: '2024-06-01T10:00:00.000Z',
+            originalFileName: 'photo.jpg',
+            exifInfo: {
+              exifImageWidth: 4032,
+              exifImageHeight: 3024,
+              make: 'Apple',
+              model: 'iPhone 15',
+              lensModel: null,
+              focalLength: 5.1,
+              fNumber: 1.8,
+              exposureTime: '1/500',
+              iso: 100,
+              city: 'Paris',
+              state: 'Île-de-France',
+              country: 'France',
+              latitude: 48.8566,
+              longitude: 2.3522,
+              fileSizeInByte: 2048000,
+            },
+          }),
         body: null,
       });
     }
     // /api/albums — list albums (owned and shared?=true variant)
     if (/\/api\/albums(\?.*)?$/.test(u)) {
       return Promise.resolve({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         headers: { get: () => null },
-        json: () => Promise.resolve([
-          { id: 'album-uuid-1', albumName: 'Vacation 2024', assetCount: 42, startDate: '2024-06-01', endDate: '2024-06-14', albumThumbnailAssetId: null },
-        ]),
+        json: () =>
+          Promise.resolve([
+            {
+              id: 'album-uuid-1',
+              albumName: 'Vacation 2024',
+              assetCount: 42,
+              startDate: '2024-06-01',
+              endDate: '2024-06-14',
+              albumThumbnailAssetId: null,
+            },
+          ]),
         body: null,
       });
     }
     // /api/albums/:id — album detail (for sync)
     if (/\/api\/albums\//.test(u)) {
       return Promise.resolve({
-        ok: true, status: 200,
+        ok: true,
+        status: 200,
         headers: { get: () => null },
         json: () => Promise.resolve({ assets: [{ id: 'asset-sync-1', type: 'IMAGE' }] }),
         body: null,
@@ -164,15 +224,6 @@ vi.mock('../../src/utils/ssrfGuard', async () => {
   };
 });
 
-import { createApp } from '../../src/app';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { resetTestDb } from '../helpers/test-db';
-import { createUser, createTrip, addTripMember, addTripPhoto, addAlbumLink, setImmichCredentials } from '../helpers/factories';
-import { authCookie } from '../helpers/auth';
-import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
-import { safeFetch } from '../../src/utils/ssrfGuard';
-
 const app: Application = createApp();
 
 const IMMICH = '/api/integrations/memories/immich';
@@ -196,9 +247,7 @@ describe('Immich connection status', () => {
   it('IMMICH-030 — GET /status when not configured returns { connected: false }', async () => {
     const { user } = createUser(testDb);
 
-    const res = await request(app)
-      .get(`${IMMICH}/status`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`${IMMICH}/status`).set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.connected).toBe(false);
@@ -208,9 +257,7 @@ describe('Immich connection status', () => {
     const { user } = createUser(testDb);
     setImmichCredentials(testDb, user.id, 'https://immich.example.com', 'test-api-key');
 
-    const res = await request(app)
-      .get(`${IMMICH}/status`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`${IMMICH}/status`).set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(res.body.connected).toBe(true);
@@ -253,9 +300,7 @@ describe('Immich browse and search', () => {
   it('IMMICH-040 — GET /browse when not configured returns 400', async () => {
     const { user } = createUser(testDb);
 
-    const res = await request(app)
-      .get(`${IMMICH}/browse`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`${IMMICH}/browse`).set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(400);
   });
@@ -264,9 +309,7 @@ describe('Immich browse and search', () => {
     const { user } = createUser(testDb);
     setImmichCredentials(testDb, user.id, 'https://immich.example.com', 'test-api-key');
 
-    const res = await request(app)
-      .get(`${IMMICH}/browse`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`${IMMICH}/browse`).set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.buckets)).toBe(true);
@@ -294,10 +337,7 @@ describe('Immich browse and search', () => {
 
     vi.mocked(safeFetch).mockRejectedValueOnce(new Error('upstream unreachable'));
 
-    const res = await request(app)
-      .post(`${IMMICH}/search`)
-      .set('Cookie', authCookie(user.id))
-      .send({});
+    const res = await request(app).post(`${IMMICH}/search`).set('Cookie', authCookie(user.id)).send({});
 
     expect(res.status).toBe(502);
     expect(res.body.error).toBeDefined();
@@ -381,7 +421,7 @@ describe('Immich asset proxy', () => {
     expect(res.body).toBeDefined();
   });
 
-  it('IMMICH-055 — GET /assets/thumbnail for other\'s unshared photo returns 403', async () => {
+  it("IMMICH-055 — GET /assets/thumbnail for other's unshared photo returns 403", async () => {
     const { user: owner } = createUser(testDb);
     const { user: member } = createUser(testDb);
     const trip = createTrip(testDb, owner.id);
@@ -416,11 +456,15 @@ describe('Immich asset proxy', () => {
     const { user: member } = createUser(testDb);
     // Insert a shared photo referencing a trip that doesn't exist (FK disabled temporarily)
     testDb.exec('PRAGMA foreign_keys = OFF');
-    testDb.prepare('INSERT OR IGNORE INTO trek_photos (provider, asset_id, owner_id) VALUES (?, ?, ?)').run('immich', 'asset-notrip', owner.id);
-    const tkpNotrip = testDb.prepare('SELECT id FROM trek_photos WHERE provider = ? AND asset_id = ? AND owner_id = ?').get('immich', 'asset-notrip', owner.id) as any;
-    testDb.prepare(
-      'INSERT INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, ?)'
-    ).run(9999, owner.id, tkpNotrip.id, 1);
+    testDb
+      .prepare('INSERT OR IGNORE INTO trek_photos (provider, asset_id, owner_id) VALUES (?, ?, ?)')
+      .run('immich', 'asset-notrip', owner.id);
+    const tkpNotrip = testDb
+      .prepare('SELECT id FROM trek_photos WHERE provider = ? AND asset_id = ? AND owner_id = ?')
+      .get('immich', 'asset-notrip', owner.id) as any;
+    testDb
+      .prepare('INSERT INTO trip_photos (trip_id, user_id, photo_id, shared) VALUES (?, ?, ?, ?)')
+      .run(9999, owner.id, tkpNotrip.id, 1);
     testDb.exec('PRAGMA foreign_keys = ON');
 
     const res = await request(app)
@@ -438,7 +482,8 @@ describe('Immich asset proxy', () => {
     addTripPhoto(testDb, trip.id, user.id, 'asset-upstream-err', 'immich', { shared: false });
 
     vi.mocked(safeFetch).mockResolvedValueOnce({
-      ok: false, status: 503,
+      ok: false,
+      status: 503,
       headers: { get: () => null } as any,
       json: async () => ({}),
     } as any);
@@ -458,9 +503,7 @@ describe('Immich albums', () => {
   it('IMMICH-060 — GET /albums when not configured returns 400', async () => {
     const { user } = createUser(testDb);
 
-    const res = await request(app)
-      .get(`${IMMICH}/albums`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`${IMMICH}/albums`).set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(400);
   });
@@ -469,9 +512,7 @@ describe('Immich albums', () => {
     const { user } = createUser(testDb);
     setImmichCredentials(testDb, user.id, 'https://immich.example.com', 'test-api-key');
 
-    const res = await request(app)
-      .get(`${IMMICH}/albums`)
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get(`${IMMICH}/albums`).set('Cookie', authCookie(user.id));
 
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.albums)).toBe(true);
@@ -534,11 +575,15 @@ describe('Immich syncAlbumAssets', () => {
     expect(typeof res.body.added).toBe('number');
 
     // Verify photos were inserted into the DB
-    const photos = testDb.prepare(`
+    const photos = testDb
+      .prepare(
+        `
       SELECT tp.*, tkp.provider FROM trip_photos tp
       JOIN trek_photos tkp ON tkp.id = tp.photo_id
       WHERE tp.trip_id = ? AND tp.user_id = ?
-    `).all(trip.id, user.id) as any[];
+    `,
+      )
+      .all(trip.id, user.id) as any[];
     expect(photos.length).toBeGreaterThan(0);
     expect(photos[0].provider).toBe('immich');
   });
@@ -619,17 +664,19 @@ describe('Immich searchPhotos pagination pass-through', () => {
 
     // Return a full page so hasMore=true (items.length >= size)
     const fullPageResponse = {
-      ok: true, status: 200,
+      ok: true,
+      status: 200,
       headers: { get: () => null },
-      json: () => Promise.resolve({
-        assets: {
-          items: Array.from({ length: 50 }, (_, i) => ({
-            id: `asset-p2-${i}`,
-            fileCreatedAt: '2024-06-01T10:00:00.000Z',
-            exifInfo: { city: 'Berlin', country: 'Germany' },
-          })),
-        },
-      }),
+      json: () =>
+        Promise.resolve({
+          assets: {
+            items: Array.from({ length: 50 }, (_, i) => ({
+              id: `asset-p2-${i}`,
+              fileCreatedAt: '2024-06-01T10:00:00.000Z',
+              exifInfo: { city: 'Berlin', country: 'Germany' },
+            })),
+          },
+        }),
       body: null,
     } as any;
 
@@ -659,17 +706,19 @@ describe('Immich searchPhotos pagination pass-through', () => {
 
     // Partial page → hasMore=false
     const partialPageResponse = {
-      ok: true, status: 200,
+      ok: true,
+      status: 200,
       headers: { get: () => null },
-      json: () => Promise.resolve({
-        assets: {
-          items: Array.from({ length: 3 }, (_, i) => ({
-            id: `asset-last-${i}`,
-            fileCreatedAt: '2024-06-01T10:00:00.000Z',
-            exifInfo: { city: 'Rome', country: 'Italy' },
-          })),
-        },
-      }),
+      json: () =>
+        Promise.resolve({
+          assets: {
+            items: Array.from({ length: 3 }, (_, i) => ({
+              id: `asset-last-${i}`,
+              fileCreatedAt: '2024-06-01T10:00:00.000Z',
+              exifInfo: { city: 'Rome', country: 'Italy' },
+            })),
+          },
+        }),
       body: null,
     } as any;
 
@@ -734,7 +783,7 @@ describe('Immich testConnection canonical URL detection', () => {
       ok: true,
       status: 200,
       url: 'https://immich.example.com/api/users/me',
-      headers: { get: (h: string) => h === 'content-type' ? 'application/json' : null } as any,
+      headers: { get: (h: string) => (h === 'content-type' ? 'application/json' : null) } as any,
       json: async () => ({ name: 'Redirect User', email: 'redirect@immich.local' }),
       body: null,
     } as any);

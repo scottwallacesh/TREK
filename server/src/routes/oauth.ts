@@ -1,9 +1,9 @@
-import express, { Request, Response } from 'express';
-import { authenticate, requireCookieAuth, optionalAuth } from '../middleware/auth';
-import { AuthRequest, OptionalAuthRequest } from '../types';
-import { isAddonEnabled } from '../services/adminService';
-import { ALL_SCOPES } from '../mcp/scopes';
 import { ADDON_IDS } from '../addons';
+import { ALL_SCOPES } from '../mcp/scopes';
+import { authenticate, requireCookieAuth, optionalAuth } from '../middleware/auth';
+import { isAddonEnabled } from '../services/adminService';
+import { writeAudit, getClientIp, logWarn } from '../services/auditLog';
+import { getMcpSafeUrl } from '../services/notifications';
 import {
   validateAuthorizeRequest,
   createAuthCode,
@@ -24,14 +24,18 @@ import {
   getUserByAccessToken,
   AuthorizeParams,
 } from '../services/oauthService';
-import { writeAudit, getClientIp, logWarn } from '../services/auditLog';
-import { getMcpSafeUrl } from '../services/notifications';
+import { AuthRequest, OptionalAuthRequest } from '../types';
+
+import express, { Request, Response } from 'express';
 
 // ---------------------------------------------------------------------------
 // Minimal in-file rate limiter (same pattern as auth.ts)
 // ---------------------------------------------------------------------------
 
-interface RateEntry { count: number; first: number; }
+interface RateEntry {
+  count: number;
+  first: number;
+}
 
 function makeRateLimiter(maxAttempts: number, windowMs: number, keyFn: (req: Request) => string) {
   const store = new Map<string, RateEntry>();
@@ -45,7 +49,9 @@ function makeRateLimiter(maxAttempts: number, windowMs: number, keyFn: (req: Req
     const now = Date.now();
     const record = store.get(key);
     if (record && record.count >= maxAttempts && now - record.first < windowMs) {
-      res.status(429).json({ error: 'too_many_requests', error_description: 'Too many attempts. Please try again later.' });
+      res
+        .status(429)
+        .json({ error: 'too_many_requests', error_description: 'Too many attempts. Please try again later.' });
       return;
     }
     if (!record || now - record.first >= windowMs) {
@@ -57,9 +63,9 @@ function makeRateLimiter(maxAttempts: number, windowMs: number, keyFn: (req: Req
   };
 }
 
-const tokenLimiter    = makeRateLimiter(30, 60_000, (req) => `${req.ip}|${req.body?.client_id ?? ''}`);
+const tokenLimiter = makeRateLimiter(30, 60_000, (req) => `${req.ip}|${req.body?.client_id ?? ''}`);
 const validateLimiter = makeRateLimiter(30, 60_000, (req) => req.ip ?? 'unknown');
-const revokeLimiter   = makeRateLimiter(10, 60_000, (req) => req.ip ?? 'unknown');
+const revokeLimiter = makeRateLimiter(10, 60_000, (req) => req.ip ?? 'unknown');
 
 // ---------------------------------------------------------------------------
 // Public router: /oauth/token and /oauth/revoke
@@ -88,30 +94,52 @@ oauthPublicRouter.post('/oauth/token', tokenLimiter, (req: Request, res: Respons
   // ---- authorization_code grant ----
   if (grant_type === 'authorization_code') {
     if (!code || !redirect_uri || !code_verifier) {
-      return res.status(400).json({ error: 'invalid_request', error_description: 'code, redirect_uri, and code_verifier are required' });
+      return res
+        .status(400)
+        .json({ error: 'invalid_request', error_description: 'code, redirect_uri, and code_verifier are required' });
     }
 
     const pending = consumeAuthCode(code);
 
     // H5: collapse all invalid_grant cases to one message; log specifics server-side
     if (!pending) {
-      writeAudit({ userId: null, action: 'oauth.token.grant_failed', details: { client_id, reason: 'code_invalid_or_expired' }, ip });
+      writeAudit({
+        userId: null,
+        action: 'oauth.token.grant_failed',
+        details: { client_id, reason: 'code_invalid_or_expired' },
+        ip,
+      });
       return res.status(400).json({ error: 'invalid_grant', error_description: 'Authorization grant is invalid.' });
     }
 
     if (pending.clientId !== client_id) {
-      writeAudit({ userId: pending.userId, action: 'oauth.token.grant_failed', details: { client_id, reason: 'client_id_mismatch' }, ip });
+      writeAudit({
+        userId: pending.userId,
+        action: 'oauth.token.grant_failed',
+        details: { client_id, reason: 'client_id_mismatch' },
+        ip,
+      });
       return res.status(400).json({ error: 'invalid_grant', error_description: 'Authorization grant is invalid.' });
     }
 
     if (pending.redirectUri !== redirect_uri) {
-      writeAudit({ userId: pending.userId, action: 'oauth.token.grant_failed', details: { client_id, reason: 'redirect_uri_mismatch' }, ip });
+      writeAudit({
+        userId: pending.userId,
+        action: 'oauth.token.grant_failed',
+        details: { client_id, reason: 'redirect_uri_mismatch' },
+        ip,
+      });
       return res.status(400).json({ error: 'invalid_grant', error_description: 'Authorization grant is invalid.' });
     }
 
     // RFC 8707: if the auth code was bound to a resource, the token request must present the same value
     if (pending.resource && resource && pending.resource !== resource.replace(/\/+$/, '')) {
-      writeAudit({ userId: pending.userId, action: 'oauth.token.grant_failed', details: { client_id, reason: 'resource_mismatch' }, ip });
+      writeAudit({
+        userId: pending.userId,
+        action: 'oauth.token.grant_failed',
+        details: { client_id, reason: 'resource_mismatch' },
+        ip,
+      });
       return res.status(400).json({ error: 'invalid_grant', error_description: 'Authorization grant is invalid.' });
     }
 
@@ -124,12 +152,22 @@ oauthPublicRouter.post('/oauth/token', tokenLimiter, (req: Request, res: Respons
 
     // Verify PKCE
     if (!verifyPKCE(code_verifier, pending.codeChallenge)) {
-      writeAudit({ userId: pending.userId, action: 'oauth.token.grant_failed', details: { client_id, reason: 'pkce_failed' }, ip });
+      writeAudit({
+        userId: pending.userId,
+        action: 'oauth.token.grant_failed',
+        details: { client_id, reason: 'pkce_failed' },
+        ip,
+      });
       return res.status(400).json({ error: 'invalid_grant', error_description: 'Authorization grant is invalid.' });
     }
 
     const tokens = issueTokens(client_id, pending.userId, pending.scopes, null, pending.resource ?? null);
-    writeAudit({ userId: pending.userId, action: 'oauth.token.issue', details: { client_id, scopes: pending.scopes, audience: pending.resource ?? null }, ip });
+    writeAudit({
+      userId: pending.userId,
+      action: 'oauth.token.issue',
+      details: { client_id, scopes: pending.scopes, audience: pending.resource ?? null },
+      ip,
+    });
     return res.json(tokens);
   }
 
@@ -146,7 +184,8 @@ oauthPublicRouter.post('/oauth/token', tokenLimiter, (req: Request, res: Respons
       }
       return res.status(result.status || 400).json({
         error: result.error,
-        error_description: result.error === 'invalid_client' ? 'Invalid client credentials' : 'Refresh token is invalid or expired',
+        error_description:
+          result.error === 'invalid_client' ? 'Invalid client credentials' : 'Refresh token is invalid or expired',
       });
     }
 
@@ -156,7 +195,9 @@ oauthPublicRouter.post('/oauth/token', tokenLimiter, (req: Request, res: Respons
   // ---- client_credentials grant ----
   if (grant_type === 'client_credentials') {
     if (!client_secret) {
-      return res.status(401).json({ error: 'invalid_client', error_description: 'client_secret is required for client_credentials grant' });
+      return res
+        .status(401)
+        .json({ error: 'invalid_client', error_description: 'client_secret is required for client_credentials grant' });
     }
 
     const client = authenticateClient(client_id, client_secret);
@@ -168,8 +209,16 @@ oauthPublicRouter.post('/oauth/token', tokenLimiter, (req: Request, res: Respons
 
     // Public clients and DCR-anonymous clients are ineligible for client_credentials.
     if (client.is_public || !client.allows_client_credentials || client.user_id == null) {
-      writeAudit({ userId: client.user_id ?? null, action: 'oauth.token.grant_failed', details: { client_id, reason: 'unauthorized_client' }, ip });
-      return res.status(400).json({ error: 'unauthorized_client', error_description: 'This client is not authorized for the client_credentials grant' });
+      writeAudit({
+        userId: client.user_id ?? null,
+        action: 'oauth.token.grant_failed',
+        details: { client_id, reason: 'unauthorized_client' },
+        ip,
+      });
+      return res.status(400).json({
+        error: 'unauthorized_client',
+        error_description: 'This client is not authorized for the client_credentials grant',
+      });
     }
 
     // Scope: use requested subset or fall back to all allowed scopes.
@@ -177,9 +226,12 @@ oauthPublicRouter.post('/oauth/token', tokenLimiter, (req: Request, res: Respons
     let grantedScopes: string[];
     if (body.scope) {
       const requested = body.scope.split(' ').filter(Boolean);
-      const invalid = requested.filter(s => !allowedScopes.includes(s));
+      const invalid = requested.filter((s) => !allowedScopes.includes(s));
       if (invalid.length > 0) {
-        return res.status(400).json({ error: 'invalid_scope', error_description: `Scopes not allowed for this client: ${invalid.join(', ')}` });
+        return res.status(400).json({
+          error: 'invalid_scope',
+          error_description: `Scopes not allowed for this client: ${invalid.join(', ')}`,
+        });
       }
       grantedScopes = requested;
     } else {
@@ -191,11 +243,18 @@ oauthPublicRouter.post('/oauth/token', tokenLimiter, (req: Request, res: Respons
     const audience = resource ? resource.replace(/\/+$/, '') : `${getMcpSafeUrl().replace(/\/+$/, '')}/mcp`;
 
     const tokens = issueClientCredentialsToken(client_id, client.user_id, grantedScopes, audience);
-    writeAudit({ userId: client.user_id, action: 'oauth.token.issue', details: { client_id, scopes: grantedScopes, audience, grant: 'client_credentials' }, ip });
+    writeAudit({
+      userId: client.user_id,
+      action: 'oauth.token.issue',
+      details: { client_id, scopes: grantedScopes, audience, grant: 'client_credentials' },
+      ip,
+    });
     return res.json(tokens);
   }
 
-  return res.status(400).json({ error: 'unsupported_grant_type', error_description: `Unsupported grant_type: ${grant_type}` });
+  return res
+    .status(400)
+    .json({ error: 'unsupported_grant_type', error_description: `Unsupported grant_type: ${grant_type}` });
 });
 
 // OIDC UserInfo endpoint (RFC 9068 / OpenID Connect Core §5.3)
@@ -214,8 +273,8 @@ oauthPublicRouter.get('/oauth/userinfo', (req: Request, res: Response) => {
     return res.status(401).json({ error: 'invalid_token' });
   }
   return res.json({
-    sub:            String(info.user.id),
-    email:          info.user.email,
+    sub: String(info.user.id),
+    email: info.user.email,
     email_verified: true,
     preferred_username: info.user.username,
   });
@@ -234,7 +293,12 @@ oauthPublicRouter.post('/oauth/revoke', revokeLimiter, (req: Request, res: Respo
 
   if (!authenticateClient(client_id, client_secret)) {
     logWarn(`[OAuth] Invalid client credentials on revoke for client_id=${client_id} ip=${ip ?? '-'}`);
-    writeAudit({ userId: null, action: 'oauth.token.client_auth_failed', details: { client_id, endpoint: 'revoke' }, ip });
+    writeAudit({
+      userId: null,
+      action: 'oauth.token.client_auth_failed',
+      details: { client_id, endpoint: 'revoke' },
+      ip,
+    });
     return res.status(401).json({ error: 'invalid_client', error_description: 'Invalid client credentials' });
   }
 
@@ -258,17 +322,17 @@ oauthApiRouter.get('/authorize/validate', validateLimiter, optionalAuth, (req: R
   const userId = (req as OptionalAuthRequest).user?.id ?? null;
 
   const result = validateAuthorizeRequest(
-      {
-        response_type:          params.response_type || '',
-        client_id:              params.client_id || '',
-        redirect_uri:           params.redirect_uri || '',
-        scope:                  params.scope || '',
-        state:                  params.state,
-        code_challenge:         params.code_challenge || '',
-        code_challenge_method:  params.code_challenge_method || '',
-        resource:               typeof params.resource === 'string' ? params.resource : undefined,
-      },
-      userId,
+    {
+      response_type: params.response_type || '',
+      client_id: params.client_id || '',
+      redirect_uri: params.redirect_uri || '',
+      scope: params.scope || '',
+      state: params.state,
+      code_challenge: params.code_challenge || '',
+      code_challenge_method: params.code_challenge_method || '',
+      resource: typeof params.resource === 'string' ? params.resource : undefined,
+    },
+    userId,
   );
 
   // H3: when caller is unauthenticated, strip client name / allowed_scopes from the response
@@ -288,19 +352,17 @@ oauthApiRouter.get('/authorize/validate', validateLimiter, optionalAuth, (req: R
 // User submits consent (approve or deny) — requires cookie-only auth (M7)
 oauthApiRouter.post('/authorize', requireCookieAuth, (req: Request, res: Response) => {
   const { user } = req as AuthRequest;
-  const {
-    client_id, redirect_uri, scope, state,
-    code_challenge, code_challenge_method, approved, resource,
-  } = req.body as {
-    client_id: string;
-    redirect_uri: string;
-    scope: string;
-    state?: string;
-    code_challenge: string;
-    code_challenge_method: string;
-    approved: boolean;
-    resource?: string;
-  };
+  const { client_id, redirect_uri, scope, state, code_challenge, code_challenge_method, approved, resource } =
+    req.body as {
+      client_id: string;
+      redirect_uri: string;
+      scope: string;
+      state?: string;
+      code_challenge: string;
+      code_challenge_method: string;
+      approved: boolean;
+      resource?: string;
+    };
   const ip = getClientIp(req);
 
   if (!isAddonEnabled(ADDON_IDS.MCP)) {
@@ -333,7 +395,7 @@ oauthApiRouter.post('/authorize', requireCookieAuth, (req: Request, res: Respons
     return res.status(400).json({ error: validation.error, error_description: validation.error_description });
   }
 
-  const scopes = validation.scopes!;
+  const scopes = validation.scopes;
 
   // Store consent (union with any existing scopes)
   saveConsent(client_id, user.id, scopes, ip);
@@ -350,7 +412,9 @@ oauthApiRouter.post('/authorize', requireCookieAuth, (req: Request, res: Respons
   });
 
   if (!code) {
-    return res.status(503).json({ error: 'server_error', error_description: 'Authorization server is temporarily unavailable' });
+    return res
+      .status(503)
+      .json({ error: 'server_error', error_description: 'Authorization server is temporarily unavailable' });
   }
 
   const url = new URL(redirect_uri);
@@ -378,7 +442,9 @@ oauthApiRouter.post('/clients', requireCookieAuth, (req: Request, res: Response)
     allows_client_credentials?: boolean;
   };
 
-  const result = createOAuthClient(user.id, name, redirect_uris ?? [], allowed_scopes, getClientIp(req), { allowsClientCredentials: allows_client_credentials });
+  const result = createOAuthClient(user.id, name, redirect_uris ?? [], allowed_scopes, getClientIp(req), {
+    allowsClientCredentials: allows_client_credentials,
+  });
   if (result.error) return res.status(result.status || 400).json({ error: result.error });
   return res.status(201).json(result);
 });

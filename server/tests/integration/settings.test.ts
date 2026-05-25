@@ -2,9 +2,17 @@
  * Settings integration tests — SET-001 through SET-008.
  * Covers GET /api/settings, PUT /api/settings, POST /api/settings/bulk.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
-import request from 'supertest';
+import { createApp } from '../../src/app';
+import { runMigrations } from '../../src/db/migrations';
+import { createTables } from '../../src/db/schema';
+import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
+import { authCookie } from '../helpers/auth';
+import { createUser } from '../helpers/factories';
+import { resetTestDb } from '../helpers/test-db';
+
 import type { Application } from 'express';
+import request from 'supertest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
 const { testDb, dbMock } = vi.hoisted(() => {
   const Database = require('better-sqlite3');
@@ -18,7 +26,11 @@ const { testDb, dbMock } = vi.hoisted(() => {
     reinitialize: () => {},
     getPlaceWithTags: () => null,
     canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
+      db
+        .prepare(
+          `SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`,
+        )
+        .get(userId, tripId, userId),
     isOwner: (tripId: any, userId: number) =>
       !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
@@ -31,14 +43,6 @@ vi.mock('../../src/config', () => ({
   ENCRYPTION_KEY: 'a1b2c3d4e5f6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2a3b4c5d6a7b8c9d0e1f2',
   updateJwtSecret: () => {},
 }));
-
-import { createApp } from '../../src/app';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { resetTestDb } from '../helpers/test-db';
-import { createUser } from '../helpers/factories';
-import { authCookie } from '../helpers/auth';
-import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
 
 const app: Application = createApp();
 
@@ -60,9 +64,7 @@ afterAll(() => {
 describe('Settings', () => {
   it('SET-001: GET /api/settings returns empty object for new user', async () => {
     const { user } = createUser(testDb);
-    const res = await request(app)
-      .get('/api/settings')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/settings').set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body.settings).toBeDefined();
     expect(typeof res.body.settings).toBe('object');
@@ -84,10 +86,7 @@ describe('Settings', () => {
 
   it('SET-003: PUT /api/settings updates an existing key', async () => {
     const { user } = createUser(testDb);
-    await request(app)
-      .put('/api/settings')
-      .set('Cookie', authCookie(user.id))
-      .send({ key: 'theme', value: 'dark' });
+    await request(app).put('/api/settings').set('Cookie', authCookie(user.id)).send({ key: 'theme', value: 'dark' });
 
     const res = await request(app)
       .put('/api/settings')
@@ -98,9 +97,7 @@ describe('Settings', () => {
     expect(res.body.value).toBe('light');
 
     // Verify the GET reflects the updated value
-    const getRes = await request(app)
-      .get('/api/settings')
-      .set('Cookie', authCookie(user.id));
+    const getRes = await request(app).get('/api/settings').set('Cookie', authCookie(user.id));
     expect(getRes.body.settings.theme).toBe('light');
   });
 
@@ -122,9 +119,7 @@ describe('Settings', () => {
       .set('Cookie', authCookie(user.id))
       .send({ settings: { theme: 'dark', language: 'fr' } });
 
-    const res = await request(app)
-      .get('/api/settings')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/settings').set('Cookie', authCookie(user.id));
     expect(res.status).toBe(200);
     expect(res.body.settings.theme).toBe('dark');
     expect(res.body.settings.language).toBe('fr');
@@ -137,10 +132,7 @@ describe('Settings', () => {
 
   it('SET-007: PUT /api/settings without key returns 400', async () => {
     const { user } = createUser(testDb);
-    const res = await request(app)
-      .put('/api/settings')
-      .set('Cookie', authCookie(user.id))
-      .send({ value: 'dark' });
+    const res = await request(app).put('/api/settings').set('Cookie', authCookie(user.id)).send({ value: 'dark' });
     expect(res.status).toBe(400);
     expect(res.body.error).toBeDefined();
   });
@@ -180,9 +172,7 @@ describe('Settings', () => {
       .set('Cookie', authCookie(userA.id))
       .send({ key: 'secret_setting', value: 'user_a_secret' });
 
-    const res = await request(app)
-      .get('/api/settings')
-      .set('Cookie', authCookie(userB.id));
+    const res = await request(app).get('/api/settings').set('Cookie', authCookie(userB.id));
     expect(res.status).toBe(200);
     expect(res.body.settings.secret_setting).toBeUndefined();
   });

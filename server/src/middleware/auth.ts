@@ -1,10 +1,11 @@
-import { Request, Response, NextFunction } from 'express';
-import jwt from 'jsonwebtoken';
-import { db } from '../db/database';
 import { JWT_SECRET } from '../config';
+import { db } from '../db/database';
+import { isDemoEmail } from '../services/demo';
 import { AuthRequest, OptionalAuthRequest, User } from '../types';
 import { applyIdempotency } from './idempotency';
-import { isDemoEmail } from '../services/demo';
+
+import { Request, Response, NextFunction } from 'express';
+import jwt from 'jsonwebtoken';
 
 export function extractToken(req: Request): string | null {
   // Prefer httpOnly cookie; fall back to Authorization: Bearer (MCP, API clients)
@@ -28,9 +29,9 @@ export function extractToken(req: Request): string | null {
 export function verifyJwtAndLoadUser(token: string): User | null {
   try {
     const decoded = jwt.verify(token, JWT_SECRET, { algorithms: ['HS256'] }) as { id: number; pv?: number };
-    const row = db.prepare(
-      'SELECT id, username, email, role, password_version FROM users WHERE id = ?'
-    ).get(decoded.id) as (User & { password_version?: number }) | undefined;
+    const row = db
+      .prepare('SELECT id, username, email, role, password_version FROM users WHERE id = ?')
+      .get(decoded.id) as (User & { password_version?: number }) | undefined;
     if (!row) return null;
     // Session invalidation: any token whose embedded password_version
     // predates the user's current one is rejected. Tokens issued before
@@ -41,7 +42,7 @@ export function verifyJwtAndLoadUser(token: string): User | null {
     if (tokenPv !== currentPv) return null;
     // Don't leak password_version beyond the middleware.
     const { password_version: _pv, ...user } = row;
-    return user as User;
+    return user;
   } catch {
     return null;
   }

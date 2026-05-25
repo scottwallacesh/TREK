@@ -1,6 +1,6 @@
 // FE-COMP-MOBILETOPHEADER-001 to FE-COMP-MOBILETOPHEADER-004
 
-import { describe, it, expect } from 'vitest';
+import { describe, expect, it } from 'vitest';
 import { render, screen } from '../../../tests/helpers/render';
 import MobileTopHeader from './MobileTopHeader';
 
@@ -24,9 +24,7 @@ describe('MobileTopHeader', () => {
   });
 
   it('FE-COMP-MOBILETOPHEADER-004: renders action children when provided', () => {
-    render(
-      <MobileTopHeader title="Trips" actions={<button>Add</button>} />,
-    );
+    render(<MobileTopHeader title="Trips" actions={<button>Add</button>} />);
     expect(screen.getByRole('button', { name: 'Add' })).toBeInTheDocument();
   });
 });

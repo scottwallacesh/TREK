@@ -1,3 +1,32 @@
+// ---------------------------------------------------------------------------
+// Imports (after mocks)
+// ---------------------------------------------------------------------------
+import { runMigrations } from '../../../src/db/migrations';
+import { createTables } from '../../../src/db/schema';
+import {
+  updateSettings,
+  getSettings,
+  listUsers,
+  getAppSettings,
+  validateKeys,
+  isOidcOnlyMode,
+  resolveAuthToggles,
+  setupMfa,
+  enableMfa,
+  disableMfa,
+  validateInviteToken,
+  registerUser,
+  loginUser,
+  changePassword,
+  verifyMfaLogin,
+  createMcpToken,
+  deleteMcpToken,
+} from '../../../src/services/authService';
+import { createUser, createAdmin, createInviteToken } from '../../helpers/factories';
+import { resetTestDb } from '../../helpers/test-db';
+
+import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
+
 /**
  * authServiceDb.test.ts
  *
@@ -23,7 +52,7 @@ const { testDb, dbMock } = vi.hoisted(() => {
     canAccessTrip: (tripId: any, userId: number) =>
       db
         .prepare(
-          `SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`
+          `SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`,
         )
         .get(userId, tripId, userId),
     isOwner: (tripId: any, userId: number) =>
@@ -60,35 +89,6 @@ vi.mock('../../../src/scheduler', () => ({
   loadSettings: vi.fn(() => ({ enabled: false })),
   VALID_INTERVALS: ['daily', 'weekly', 'monthly'],
 }));
-
-// ---------------------------------------------------------------------------
-// Imports (after mocks)
-// ---------------------------------------------------------------------------
-
-import { describe, it, expect, beforeAll, beforeEach, afterAll, vi } from 'vitest';
-import { createTables } from '../../../src/db/schema';
-import { runMigrations } from '../../../src/db/migrations';
-import { resetTestDb } from '../../helpers/test-db';
-import { createUser, createAdmin, createInviteToken } from '../../helpers/factories';
-import {
-  updateSettings,
-  getSettings,
-  listUsers,
-  getAppSettings,
-  validateKeys,
-  isOidcOnlyMode,
-  resolveAuthToggles,
-  setupMfa,
-  enableMfa,
-  disableMfa,
-  validateInviteToken,
-  registerUser,
-  loginUser,
-  changePassword,
-  verifyMfaLogin,
-  createMcpToken,
-  deleteMcpToken,
-} from '../../../src/services/authService';
 
 // ---------------------------------------------------------------------------
 // Lifecycle
@@ -229,9 +229,7 @@ describe('getAppSettings', () => {
 
   it('AUTH-DB-014: returns settings object for admin with known key allow_registration', () => {
     const { user } = createAdmin(testDb);
-    testDb
-      .prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('allow_registration', 'true')")
-      .run();
+    testDb.prepare("INSERT OR REPLACE INTO app_settings (key, value) VALUES ('allow_registration', 'true')").run();
     const result = getAppSettings(user.id);
     expect(result.status).toBeUndefined();
     expect(result.data).toBeDefined();
@@ -282,9 +280,7 @@ describe('validateKeys', () => {
     const { user } = createAdmin(testDb);
     testDb.prepare('UPDATE users SET maps_api_key = ? WHERE id = ?').run('test-key', user.id);
 
-    const fetchSpy = vi
-      .spyOn(global, 'fetch')
-      .mockRejectedValueOnce(new Error('Network failure'));
+    const fetchSpy = vi.spyOn(global, 'fetch').mockRejectedValueOnce(new Error('Network failure'));
 
     const result = await validateKeys(user.id);
     expect(result.maps).toBe(false);
@@ -330,7 +326,11 @@ describe('isOidcOnlyMode', () => {
 describe('resolveAuthToggles', () => {
   afterEach(() => {
     vi.unstubAllEnvs();
-    testDb.prepare("DELETE FROM app_settings WHERE key IN ('password_login','password_registration','oidc_login','oidc_registration','oidc_only','allow_registration')").run();
+    testDb
+      .prepare(
+        "DELETE FROM app_settings WHERE key IN ('password_login','password_registration','oidc_login','oidc_registration','oidc_only','allow_registration')",
+      )
+      .run();
   });
 
   it('AUTH-DB-022a: returns all true by default (no DB keys, no env override)', () => {
@@ -643,9 +643,9 @@ describe('MCP token service', () => {
   it('AUTH-DB-044: createMcpToken returns 400 when user has 10 tokens already', () => {
     const { user } = createUser(testDb);
     for (let i = 0; i < 10; i++) {
-      testDb.prepare(
-        'INSERT INTO mcp_tokens (user_id, name, token_hash, token_prefix) VALUES (?, ?, ?, ?)'
-      ).run(user.id, `Token ${i}`, `hash${i}`, `trek_prefix${i}`);
+      testDb
+        .prepare('INSERT INTO mcp_tokens (user_id, name, token_hash, token_prefix) VALUES (?, ?, ?, ?)')
+        .run(user.id, `Token ${i}`, `hash${i}`, `trek_prefix${i}`);
     }
     const result = createMcpToken(user.id, 'One More');
     expect(result.status).toBe(400);

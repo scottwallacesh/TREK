@@ -1,16 +1,16 @@
-import React, { useEffect, useCallback } from 'react'
-import { AlertTriangle } from 'lucide-react'
-import { useTranslation } from '../../i18n'
+import { AlertTriangle } from 'lucide-react';
+import { useCallback, useEffect } from 'react';
+import { useTranslation } from '../../i18n';
 
 interface ConfirmDialogProps {
-  isOpen: boolean
-  onClose: () => void
-  onConfirm: () => void
-  title?: string
-  message?: string
-  confirmLabel?: string
-  cancelLabel?: string
-  danger?: boolean
+  isOpen: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+  title?: string;
+  message?: string;
+  confirmLabel?: string;
+  cancelLabel?: string;
+  danger?: boolean;
 }
 
 export default function ConfirmDialog({
@@ -23,36 +23,39 @@ export default function ConfirmDialog({
   cancelLabel,
   danger = true,
 }: ConfirmDialogProps) {
-  const { t } = useTranslation()
+  const { t } = useTranslation();
 
-  const handleEsc = useCallback((e: KeyboardEvent) => {
-    if (e.key === 'Escape') onClose()
-  }, [onClose])
+  const handleEsc = useCallback(
+    (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    },
+    [onClose]
+  );
 
   useEffect(() => {
     if (isOpen) {
-      document.addEventListener('keydown', handleEsc)
+      document.addEventListener('keydown', handleEsc);
     }
-    return () => document.removeEventListener('keydown', handleEsc)
-  }, [isOpen, handleEsc])
+    return () => document.removeEventListener('keydown', handleEsc);
+  }, [isOpen, handleEsc]);
 
-  if (!isOpen) return null
+  if (!isOpen) return null;
 
   return (
     <div
-      className="fixed inset-0 z-[10000] flex items-center justify-center px-4 trek-backdrop-enter"
+      className="trek-backdrop-enter fixed inset-0 z-[10000] flex items-center justify-center px-4"
       style={{ backgroundColor: 'rgba(15, 23, 42, 0.5)', paddingBottom: 'var(--bottom-nav-h)' }}
       onClick={onClose}
     >
       <div
-        className="trek-modal-enter rounded-2xl shadow-2xl w-full max-w-sm p-6"
+        className="trek-modal-enter w-full max-w-sm rounded-2xl p-6 shadow-2xl"
         style={{ background: 'var(--bg-card)' }}
-        onClick={e => e.stopPropagation()}
+        onClick={(e) => e.stopPropagation()}
       >
         <div className="flex items-start gap-4">
           {danger && (
-            <div className="flex-shrink-0 w-10 h-10 rounded-full bg-red-100 flex items-center justify-center">
-              <AlertTriangle className="w-5 h-5 text-red-600" />
+            <div className="flex h-10 w-10 flex-shrink-0 items-center justify-center rounded-full bg-red-100">
+              <AlertTriangle className="h-5 w-5 text-red-600" />
             </div>
           )}
           <div className="flex-1">
@@ -65,10 +68,10 @@ export default function ConfirmDialog({
           </div>
         </div>
 
-        <div className="flex justify-end gap-3 mt-6">
+        <div className="mt-6 flex justify-end gap-3">
           <button
             onClick={onClose}
-            className="px-4 py-2 text-sm font-medium rounded-lg transition-colors"
+            className="rounded-lg px-4 py-2 text-sm font-medium transition-colors"
             style={{
               color: 'var(--text-secondary)',
               border: '1px solid var(--border-secondary)',
@@ -77,8 +80,11 @@ export default function ConfirmDialog({
             {cancelLabel || t('common.cancel')}
           </button>
           <button
-            onClick={() => { onConfirm(); onClose() }}
-            className={`px-4 py-2 text-sm font-medium rounded-lg transition-colors text-white ${
+            onClick={() => {
+              onConfirm();
+              onClose();
+            }}
+            className={`rounded-lg px-4 py-2 text-sm font-medium text-white transition-colors ${
               danger ? 'bg-red-600 hover:bg-red-700' : 'bg-blue-600 hover:bg-blue-700'
             }`}
           >
@@ -86,7 +92,6 @@ export default function ConfirmDialog({
           </button>
         </div>
       </div>
-
     </div>
-  )
+  );
 }

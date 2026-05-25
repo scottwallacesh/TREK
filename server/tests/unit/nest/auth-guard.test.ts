@@ -1,6 +1,7 @@
-import { describe, it, expect } from 'vitest';
-import { HttpException } from '@nestjs/common';
 import { JwtAuthGuard } from '../../../src/nest/auth/jwt-auth.guard';
+import { HttpException } from '@nestjs/common';
+
+import { describe, it, expect } from 'vitest';
 
 function context(req: unknown) {
   return { switchToHttp: () => ({ getRequest: () => req }) } as never;

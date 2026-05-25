@@ -1,7 +1,8 @@
-import express, { Request, Response } from 'express';
 import { authenticate } from '../middleware/auth';
-import { AuthRequest } from '../types';
 import * as settingsService from '../services/settingsService';
+import { AuthRequest } from '../types';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 
@@ -22,8 +23,7 @@ router.put('/', authenticate, (req: Request, res: Response) => {
 router.post('/bulk', authenticate, (req: Request, res: Response) => {
   const authReq = req as AuthRequest;
   const { settings } = req.body;
-  if (!settings || typeof settings !== 'object')
-    return res.status(400).json({ error: 'Settings object is required' });
+  if (!settings || typeof settings !== 'object') return res.status(400).json({ error: 'Settings object is required' });
   try {
     const updated = settingsService.bulkUpsertSettings(authReq.user.id, settings);
     res.json({ success: true, updated });

@@ -1,6 +1,6 @@
+import type { Server } from 'http';
 import request from 'supertest';
 import { expect } from 'vitest';
-import type { Server } from 'http';
 
 export interface ParityRequest {
   method?: 'get' | 'post' | 'put' | 'patch' | 'delete';

@@ -6,9 +6,21 @@
  *       These tests run in test env and may not have a full DB file to zip,
  *       but the service should handle gracefully.
  */
-import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
-import request from 'supertest';
+import { createApp } from '../../src/app';
+import { runMigrations } from '../../src/db/migrations';
+import { createTables } from '../../src/db/schema';
+import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
+import * as backupService from '../../src/services/backupService';
+import { authCookie } from '../helpers/auth';
+import { createAdmin, createUser } from '../helpers/factories';
+import { resetTestDb } from '../helpers/test-db';
+
 import type { Application } from 'express';
+import fs from 'fs';
+import os from 'os';
+import path from 'path';
+import request from 'supertest';
+import { describe, it, expect, vi, beforeAll, beforeEach, afterAll } from 'vitest';
 
 const { testDb, dbMock } = vi.hoisted(() => {
   const Database = require('better-sqlite3');
@@ -21,13 +33,29 @@ const { testDb, dbMock } = vi.hoisted(() => {
     closeDb: () => {},
     reinitialize: () => {},
     getPlaceWithTags: (placeId: number) => {
-      const place: any = db.prepare(`SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`).get(placeId);
+      const place: any = db
+        .prepare(
+          `SELECT p.*, c.name as category_name, c.color as category_color, c.icon as category_icon FROM places p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`,
+        )
+        .get(placeId);
       if (!place) return null;
-      const tags = db.prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`).all(placeId);
-      return { ...place, category: place.category_id ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon } : null, tags };
+      const tags = db
+        .prepare(`SELECT t.* FROM tags t JOIN place_tags pt ON t.id = pt.tag_id WHERE pt.place_id = ?`)
+        .all(placeId);
+      return {
+        ...place,
+        category: place.category_id
+          ? { id: place.category_id, name: place.category_name, color: place.category_color, icon: place.category_icon }
+          : null,
+        tags,
+      };
     },
     canAccessTrip: (tripId: any, userId: number) =>
-      db.prepare(`SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`).get(userId, tripId, userId),
+      db
+        .prepare(
+          `SELECT t.id, t.user_id FROM trips t LEFT JOIN trip_members m ON m.trip_id = t.id AND m.user_id = ? WHERE t.id = ? AND (t.user_id = ? OR m.user_id IS NOT NULL)`,
+        )
+        .get(userId, tripId, userId),
     isOwner: (tripId: any, userId: number) =>
       !!db.prepare('SELECT id FROM trips WHERE id = ? AND user_id = ?').get(tripId, userId),
   };
@@ -43,7 +71,9 @@ vi.mock('../../src/config', () => ({
 
 // Mock filesystem-dependent service functions to avoid real disk I/O in tests
 vi.mock('../../src/services/backupService', async () => {
-  const actual = await vi.importActual<typeof import('../../src/services/backupService')>('../../src/services/backupService');
+  const actual = await vi.importActual<typeof import('../../src/services/backupService')>(
+    '../../src/services/backupService',
+  );
   return {
     ...actual,
     createBackup: vi.fn().mockResolvedValue({
@@ -69,18 +99,6 @@ vi.mock('../../src/services/backupService', async () => {
   };
 });
 
-import { createApp } from '../../src/app';
-import { createTables } from '../../src/db/schema';
-import { runMigrations } from '../../src/db/migrations';
-import { resetTestDb } from '../helpers/test-db';
-import { createAdmin, createUser } from '../helpers/factories';
-import { authCookie } from '../helpers/auth';
-import { loginAttempts, mfaAttempts } from '../../src/routes/auth';
-import * as backupService from '../../src/services/backupService';
-import fs from 'fs';
-import path from 'path';
-import os from 'os';
-
 const app: Application = createApp();
 
 beforeAll(() => {
@@ -102,9 +120,7 @@ describe('Backup access control', () => {
   it('non-admin cannot access backup routes', async () => {
     const { user } = createUser(testDb);
 
-    const res = await request(app)
-      .get('/api/backup/list')
-      .set('Cookie', authCookie(user.id));
+    const res = await request(app).get('/api/backup/list').set('Cookie', authCookie(user.id));
     expect(res.status).toBe(403);
   });
 });
@@ -113,9 +129,7 @@ describe('Backup list', () => {
   it('BACKUP-001 — GET /backup/list returns backups array', async () => {
     const { user: admin } = createAdmin(testDb);
 
-    const res = await request(app)
-      .get('/api/backup/list')
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).get('/api/backup/list').set('Cookie', authCookie(admin.id));
     expect(res.status).toBe(200);
     expect(Array.isArray(res.body.backups)).toBe(true);
   });
@@ -125,9 +139,7 @@ describe('Backup creation', () => {
   it('BACKUP-001 — POST /backup/create creates a backup', async () => {
     const { user: admin } = createAdmin(testDb);
 
-    const res = await request(app)
-      .post('/api/backup/create')
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).post('/api/backup/create').set('Cookie', authCookie(admin.id));
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
     expect(res.body.backup).toHaveProperty('filename');
@@ -139,9 +151,7 @@ describe('Auto-backup settings', () => {
   it('BACKUP-008 — GET /backup/auto-settings returns current config', async () => {
     const { user: admin } = createAdmin(testDb);
 
-    const res = await request(app)
-      .get('/api/backup/auto-settings')
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).get('/api/backup/auto-settings').set('Cookie', authCookie(admin.id));
     expect(res.status).toBe(200);
     expect(res.body).toHaveProperty('settings');
     expect(res.body.settings).toHaveProperty('enabled');
@@ -165,9 +175,7 @@ describe('Backup security', () => {
   it('BACKUP-007 — Download with path traversal filename is rejected', async () => {
     const { user: admin } = createAdmin(testDb);
 
-    const res = await request(app)
-      .get('/api/backup/download/../../etc/passwd')
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).get('/api/backup/download/../../etc/passwd').set('Cookie', authCookie(admin.id));
     // Express normalises the URL before routing; path traversal gets resolved
     // to a path that matches no route → 404
     expect(res.status).toBe(404);
@@ -176,9 +184,7 @@ describe('Backup security', () => {
   it('BACKUP-007 — Delete with path traversal filename is rejected', async () => {
     const { user: admin } = createAdmin(testDb);
 
-    const res = await request(app)
-      .delete('/api/backup/../../../etc/passwd')
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).delete('/api/backup/../../../etc/passwd').set('Cookie', authCookie(admin.id));
     // Express normalises the URL, stripping traversal → no route match → 404
     expect(res.status).toBe(404);
   });
@@ -200,16 +206,16 @@ describe('Backup download', () => {
   });
 
   afterAll(() => {
-    try { fs.unlinkSync(tmpFile); } catch {}
+    try {
+      fs.unlinkSync(tmpFile);
+    } catch {}
   });
 
   it('BACKUP-INT-001 — GET /backup/download/:filename returns 200 with content-disposition', async () => {
     const { user: admin } = createAdmin(testDb);
     const filename = 'backup-2026-04-06T12-00-00.zip';
 
-    const res = await request(app)
-      .get(`/api/backup/download/${filename}`)
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).get(`/api/backup/download/${filename}`).set('Cookie', authCookie(admin.id));
 
     expect(res.status).toBe(200);
     expect(res.headers['content-disposition']).toMatch(/attachment/i);
@@ -253,9 +259,7 @@ describe('Backup restore', () => {
     vi.mocked(backupService.backupFileExists).mockReturnValue(true);
     vi.mocked(backupService.restoreFromZip).mockResolvedValue({ success: true });
 
-    const res = await request(app)
-      .post(`/api/backup/restore/${filename}`)
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).post(`/api/backup/restore/${filename}`).set('Cookie', authCookie(admin.id));
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -277,9 +281,7 @@ describe('Backup restore', () => {
   it('BACKUP-INT-006 — POST /backup/restore/:filename returns 400 for invalid filename', async () => {
     const { user: admin } = createAdmin(testDb);
 
-    const res = await request(app)
-      .post('/api/backup/restore/../../evil.zip')
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).post('/api/backup/restore/../../evil.zip').set('Cookie', authCookie(admin.id));
 
     // Express resolves path traversal → no route or invalid filename check
     expect([400, 404]).toContain(res.status);
@@ -296,9 +298,7 @@ describe('Backup restore', () => {
       status: 400,
     });
 
-    const res = await request(app)
-      .post(`/api/backup/restore/${filename}`)
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).post(`/api/backup/restore/${filename}`).set('Cookie', authCookie(admin.id));
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/travel\.db not found/i);
@@ -317,9 +317,7 @@ describe('Backup delete', () => {
     vi.mocked(backupService.backupFileExists).mockReturnValue(true);
     vi.mocked(backupService.deleteBackup).mockReturnValue(undefined);
 
-    const res = await request(app)
-      .delete(`/api/backup/${filename}`)
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).delete(`/api/backup/${filename}`).set('Cookie', authCookie(admin.id));
 
     expect(res.status).toBe(200);
     expect(res.body.success).toBe(true);
@@ -342,9 +340,7 @@ describe('Backup delete', () => {
   it('BACKUP-INT-010 — DELETE /backup/:filename returns 400 for invalid filename', async () => {
     const { user: admin } = createAdmin(testDb);
 
-    const res = await request(app)
-      .delete('/api/backup/not-a-backup.tar.gz')
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).delete('/api/backup/not-a-backup.tar.gz').set('Cookie', authCookie(admin.id));
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/invalid filename/i);
@@ -368,16 +364,12 @@ describe('Backup rate limiter', () => {
 
     // First 3 succeed
     for (let i = 0; i < 3; i++) {
-      const res = await request(app)
-        .post('/api/backup/create')
-        .set('Cookie', authCookie(admin.id));
+      const res = await request(app).post('/api/backup/create').set('Cookie', authCookie(admin.id));
       expect(res.status).toBe(200);
     }
 
     // 4th is rate-limited
-    const res = await request(app)
-      .post('/api/backup/create')
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).post('/api/backup/create').set('Cookie', authCookie(admin.id));
     expect(res.status).toBe(429);
     expect(res.body.error).toMatch(/too many/i);
   });
@@ -409,9 +401,7 @@ describe('Backup upload-restore', () => {
   it('BACKUP-INT-013 — POST /backup/upload-restore with no file returns 400', async () => {
     const { user: admin } = createAdmin(testDb);
 
-    const res = await request(app)
-      .post('/api/backup/upload-restore')
-      .set('Cookie', authCookie(admin.id));
+    const res = await request(app).post('/api/backup/upload-restore').set('Cookie', authCookie(admin.id));
 
     expect(res.status).toBe(400);
     expect(res.body.error).toMatch(/no file/i);

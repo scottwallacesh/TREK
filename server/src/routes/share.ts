@@ -1,9 +1,10 @@
-import express, { Request, Response } from 'express';
 import { canAccessTrip } from '../db/database';
 import { authenticate } from '../middleware/auth';
 import { checkPermission } from '../services/permissions';
-import { AuthRequest } from '../types';
 import * as shareService from '../services/shareService';
+import { AuthRequest } from '../types';
+
+import express, { Request, Response } from 'express';
 
 const router = express.Router();
 
@@ -13,12 +14,24 @@ router.post('/trips/:tripId/share-link', authenticate, (req: Request, res: Respo
   const { tripId } = req.params;
   const access = canAccessTrip(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('share_manage', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'share_manage',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   const { share_map, share_bookings, share_packing, share_budget, share_collab } = req.body || {};
   const result = shareService.createOrUpdateShareLink(tripId, authReq.user.id, {
-    share_map, share_bookings, share_packing, share_budget, share_collab,
+    share_map,
+    share_bookings,
+    share_packing,
+    share_budget,
+    share_collab,
   });
 
   if (result.created) {
@@ -43,7 +56,15 @@ router.delete('/trips/:tripId/share-link', authenticate, (req: Request, res: Res
   const { tripId } = req.params;
   const access = canAccessTrip(tripId, authReq.user.id);
   if (!access) return res.status(404).json({ error: 'Trip not found' });
-  if (!checkPermission('share_manage', authReq.user.role, access.user_id, authReq.user.id, access.user_id !== authReq.user.id))
+  if (
+    !checkPermission(
+      'share_manage',
+      authReq.user.role,
+      access.user_id,
+      authReq.user.id,
+      access.user_id !== authReq.user.id,
+    )
+  )
     return res.status(403).json({ error: 'No permission' });
 
   shareService.deleteShareLink(tripId);
