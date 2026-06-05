@@ -21,6 +21,7 @@ import { verifyJwtAndLoadUser } from '../middleware/auth';
 import { User } from '../types';
 import { DEMO_EMAIL_PRIMARY, isDemoEmail } from './demo';
 import { avatarUrl } from './avatarUrl';
+import { isPasskeyConfigured } from './webauthnConfig';
 
 export { avatarUrl };
 
@@ -51,6 +52,7 @@ const ADMIN_SETTINGS_KEYS = [
   'notification_channels', 'admin_webhook_url', 'admin_ntfy_server', 'admin_ntfy_topic', 'admin_ntfy_token',
   'notify_trip_reminder',
   'password_login', 'password_registration', 'oidc_login', 'oidc_registration',
+  'passkey_login', 'webauthn_rp_id', 'webauthn_origins',
 ];
 
 const avatarDir = path.join(__dirname, '../../uploads/avatars');
@@ -128,9 +130,16 @@ export function resolveAuthToggles(): {
   password_registration: boolean;
   oidc_login: boolean;
   oidc_registration: boolean;
+  passkey_login: boolean;
 } {
   const get = (key: string) =>
     (db.prepare("SELECT value FROM app_settings WHERE key = ?").get(key) as { value: string } | undefined)?.value ?? null;
+
+  // Passkey login is independent of the password/OIDC "new keys" probe, so it
+  // must be resolved OUTSIDE the branch below — otherwise on a fresh install
+  // that never touched the password/OIDC toggles it would silently read false
+  // even after an admin enabled it. Default OFF (opt-in).
+  const passkey_login = get('passkey_login') === 'true';
 
   const hasNewKeys = ['password_login', 'password_registration', 'oidc_login', 'oidc_registration']
     .some(k => get(k) !== null);
@@ -141,6 +150,7 @@ export function resolveAuthToggles(): {
       password_registration: get('password_registration') !== 'false',
       oidc_login: get('oidc_login') !== 'false',
       oidc_registration: get('oidc_registration') !== 'false',
+      passkey_login,
     };
     if (process.env.OIDC_ONLY?.toLowerCase() === 'true') {
       result.password_login = false;
@@ -163,6 +173,7 @@ export function resolveAuthToggles(): {
     password_registration: !oidcOnly && allowReg,
     oidc_login: true,
     oidc_registration: allowReg,
+    passkey_login,
   };
 }
 
@@ -299,6 +310,12 @@ export function getAppConfig(authenticatedUser: { id: number } | null) {
     password_registration: isDemo ? false : toggles.password_registration,
     oidc_login: toggles.oidc_login,
     oidc_registration: isDemo ? false : toggles.oidc_registration,
+    // Passkey login: the instance toggle + whether a usable RP ID resolves for
+    // this deployment. The login page shows the passkey button only when both
+    // are true. `passkey_configured` stays a pure boolean — it never leaks the
+    // resolved RP ID / origin / APP_URL on this unauthenticated endpoint.
+    passkey_login: toggles.passkey_login,
+    passkey_configured: isPasskeyConfigured(),
     env_override_oidc_only: process.env.OIDC_ONLY === 'true',
     has_users: userCount > 0,
     setup_complete: setupComplete,
@@ -812,9 +829,12 @@ export function updateAppSettings(
   const { require_mfa } = body;
   if (require_mfa === true || require_mfa === 'true') {
     const adminMfa = db.prepare('SELECT mfa_enabled FROM users WHERE id = ?').get(userId) as { mfa_enabled: number } | undefined;
-    if (!(adminMfa?.mfa_enabled === 1)) {
+    // A user-verified passkey satisfies the MFA policy, so an admin who secured
+    // their own account with a passkey may enable it too (not only TOTP).
+    const adminHasPasskey = !!db.prepare('SELECT 1 FROM webauthn_credentials WHERE user_id = ? LIMIT 1').get(userId);
+    if (!(adminMfa?.mfa_enabled === 1) && !adminHasPasskey) {
       return {
-        error: 'Enable two-factor authentication on your own account before requiring it for all users.',
+        error: 'Secure your own account with two-factor authentication or a passkey before requiring it for all users.',
         status: 400,
       };
     }

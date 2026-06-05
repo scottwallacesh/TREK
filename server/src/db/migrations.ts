@@ -2340,6 +2340,35 @@ function runMigrations(db: Database.Database): void {
         "UPDATE addons SET name = 'Costs', description = 'Track and split trip expenses' WHERE id = 'budget' AND name = 'Budget Planner'",
       ).run();
     },
+    // WebAuthn / passkey support: per-user credentials + single-use login
+    // challenges. Additive (CREATE TABLE IF NOT EXISTS) so existing installs are
+    // untouched; both tables also live in schema.ts for fresh installs.
+    () => db.exec(`
+      CREATE TABLE IF NOT EXISTS webauthn_credentials (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        user_id INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        credential_id TEXT NOT NULL UNIQUE,
+        public_key BLOB NOT NULL,
+        counter INTEGER NOT NULL DEFAULT 0,
+        transports TEXT,
+        device_type TEXT,
+        backed_up INTEGER NOT NULL DEFAULT 0,
+        name TEXT,
+        aaguid TEXT,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        last_used_at DATETIME
+      );
+      CREATE INDEX IF NOT EXISTS idx_webauthn_credentials_user ON webauthn_credentials(user_id);
+      CREATE TABLE IF NOT EXISTS webauthn_challenges (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        challenge TEXT NOT NULL UNIQUE,
+        user_id INTEGER REFERENCES users(id) ON DELETE CASCADE,
+        type TEXT NOT NULL,
+        expires_at INTEGER NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      );
+      CREATE INDEX IF NOT EXISTS idx_webauthn_challenges_expires ON webauthn_challenges(expires_at);
+    `),
   ];
 
   if (currentVersion < migrations.length) {

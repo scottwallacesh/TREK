@@ -60,6 +60,13 @@ export class AdminController {
     return { success: true };
   }
 
+  @Delete('users/:id/passkeys')
+  resetUserPasskeys(@CurrentUser() user: User, @Param('id') id: string, @Req() req: Request) {
+    const result = ok(this.admin.resetUserPasskeys(id));
+    writeAudit({ userId: user.id, action: 'admin.user_passkeys_reset', resource: String(id), ip: getClientIp(req), details: { targetUser: result.email, deleted: result.deleted } });
+    return { success: true, deleted: result.deleted };
+  }
+
   // ── Stats / permissions / audit ──
   @Get('stats')
   stats() { return this.admin.getStats(); }

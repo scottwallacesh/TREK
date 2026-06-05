@@ -3,6 +3,7 @@ import { useNavigate, useLocation } from 'react-router-dom'
 import { useAuthStore } from '../../store/authStore'
 import { useSettingsStore, hasStoredLanguage } from '../../store/settingsStore'
 import { useTranslation, detectBrowserLanguage } from '../../i18n'
+import { startAuthentication } from '@simplewebauthn/browser'
 import { authApi, configApi } from '../../api/client'
 import { getApiErrorMessage } from '../../types'
 
@@ -18,6 +19,8 @@ interface AppConfig {
   password_registration: boolean
   oidc_login: boolean
   oidc_registration: boolean
+  passkey_login?: boolean
+  passkey_configured?: boolean
   env_override_oidc_only: boolean
 }
 
@@ -196,6 +199,28 @@ export function useLogin() {
     }
   }
 
+  const handlePasskeyLogin = async (): Promise<void> => {
+    setError('')
+    setIsLoading(true)
+    try {
+      const options = await authApi.passkey.loginOptions()
+      const assertion = await startAuthentication({ optionsJSON: options })
+      await authApi.passkey.loginVerify(assertion)
+      await loadUser({ silent: true })
+      setShowTakeoff(true)
+      setTimeout(() => navigate(redirectTarget), 2600)
+    } catch (err: unknown) {
+      // The user dismissing the native prompt isn't an error worth surfacing.
+      const name = (err as { name?: string })?.name
+      if (name === 'NotAllowedError' || name === 'AbortError') {
+        setIsLoading(false)
+        return
+      }
+      setError(getApiErrorMessage(err, t('login.passkey.failed')))
+      setIsLoading(false)
+    }
+  }
+
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>): Promise<void> => {
     e.preventDefault()
     setError('')
@@ -270,6 +295,6 @@ export function useLogin() {
     showTakeoff, mfaStep, setMfaStep, mfaToken, setMfaToken, mfaCode, setMfaCode,
     passwordChangeStep, newPassword, setNewPassword, confirmPassword, setConfirmPassword,
     noRedirect, showRegisterOption, oidcOnly,
-    handleDemoLogin, handleSubmit,
+    handleDemoLogin, handleSubmit, handlePasskeyLogin,
   }
 }

@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { AuthPublicController } from './auth-public.controller';
 import { AuthController } from './auth.controller';
+import { PasskeyController } from './passkey.controller';
 import { AuthService } from './auth.service';
 import { RateLimitService } from './rate-limit.service';
 
@@ -11,7 +12,7 @@ import { RateLimitService } from './rate-limit.service';
  * sub-paths explicitly rather than claiming all of /api/auth.
  */
 @Module({
-  controllers: [AuthPublicController, AuthController],
+  controllers: [AuthPublicController, AuthController, PasskeyController],
   providers: [AuthService, RateLimitService],
 })
 export class AuthModule {}
