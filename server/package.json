@@ -27,6 +27,7 @@
     "@nestjs/common": "^11.1.24",
     "@nestjs/core": "^11.1.24",
     "@nestjs/platform-express": "^11.1.24",
+    "@simplewebauthn/server": "^13.1.2",
     "archiver": "^6.0.1",
     "bcryptjs": "^2.4.3",
     "better-sqlite3": "^12.8.0",

@@ -3,6 +3,7 @@ import * as svc from '../../services/adminService';
 import { getAdminUserDefaults, setAdminUserDefaults } from '../../services/settingsService';
 import { invalidateMcpSessions } from '../../mcp';
 import { getPreferencesMatrix, setAdminPreferences } from '../../services/notificationPreferencesService';
+import { adminResetPasskeys } from '../../services/passkeyService';
 
 /**
  * Thin Nest wrapper around the existing admin service (+ the settings,
@@ -17,6 +18,7 @@ export class AdminService {
   createUser(body: unknown) { return svc.createUser(body as Parameters<typeof svc.createUser>[0]); }
   updateUser(id: string, body: unknown) { return svc.updateUser(id, body as Parameters<typeof svc.updateUser>[1]); }
   deleteUser(id: string, actingUserId: number) { return svc.deleteUser(id, actingUserId); }
+  resetUserPasskeys(id: string) { return adminResetPasskeys(Number(id)); }
 
   getStats() { return svc.getStats(); }
   getPermissions() { return svc.getPermissions(); }
