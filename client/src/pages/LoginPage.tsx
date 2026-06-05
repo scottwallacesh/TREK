@@ -1,6 +1,6 @@
 import React from 'react'
 import { SUPPORTED_LANGUAGES, useTranslation } from '../i18n'
-import { Plane, Eye, EyeOff, Mail, Lock, MapPin, Calendar, Package, User, Globe, Zap, Users, Wallet, Map, CheckSquare, BookMarked, FolderOpen, Route, Shield, KeyRound, ChevronDown } from 'lucide-react'
+import { Plane, Eye, EyeOff, Mail, Lock, MapPin, Calendar, Package, User, Globe, Zap, Users, Wallet, Map, CheckSquare, BookMarked, FolderOpen, Route, Shield, KeyRound, ChevronDown, Fingerprint } from 'lucide-react'
 import { useLogin } from './login/useLogin'
 
 export default function LoginPage(): React.ReactElement {
@@ -15,8 +15,12 @@ export default function LoginPage(): React.ReactElement {
     showTakeoff, mfaStep, setMfaStep, mfaToken, setMfaToken, mfaCode, setMfaCode,
     passwordChangeStep, newPassword, setNewPassword, confirmPassword, setConfirmPassword,
     noRedirect, showRegisterOption, oidcOnly,
-    handleDemoLogin, handleSubmit,
+    handleDemoLogin, handleSubmit, handlePasskeyLogin,
   } = useLogin()
+
+  const oidcButtonShown = !!(appConfig?.oidc_configured && appConfig?.oidc_login && !oidcOnly)
+  const passkeyAvailable = !!(appConfig?.passkey_login && appConfig?.passkey_configured && !oidcOnly
+    && mode === 'login' && !mfaStep && !passwordChangeStep)
 
   const inputBase: React.CSSProperties = {
     width: '100%', padding: '11px 12px 11px 40px', border: '1px solid #e5e7eb',
@@ -633,6 +637,36 @@ export default function LoginPage(): React.ReactElement {
                 <Shield size={16} />
                 {t('login.oidcSignIn', { name: appConfig.oidc_display_name })}
               </a>
+            </>
+          )}
+
+          {/* Passkey login button (instance toggle on + a usable RP ID resolves) */}
+          {passkeyAvailable && (
+            <>
+              {!oidcButtonShown && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginTop: 16 }}>
+                  <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
+                  <span style={{ fontSize: 12, color: '#9ca3af' }}>{t('common.or')}</span>
+                  <div style={{ flex: 1, height: 1, background: '#e5e7eb' }} />
+                </div>
+              )}
+              <button type="button" onClick={handlePasskeyLogin} disabled={isLoading}
+                style={{
+                  marginTop: 12, width: '100%', padding: '12px',
+                  background: 'white', color: '#374151',
+                  border: '1px solid #d1d5db', borderRadius: 12,
+                  fontSize: 14, fontWeight: 600, cursor: isLoading ? 'default' : 'pointer',
+                  fontFamily: 'inherit', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8,
+                  opacity: isLoading ? 0.7 : 1,
+                  transition: 'background 180ms cubic-bezier(0.23,1,0.32,1), border-color 180ms cubic-bezier(0.23,1,0.32,1)',
+                  boxSizing: 'border-box',
+                }}
+                onMouseEnter={(e: React.MouseEvent<HTMLButtonElement>) => { if (!isLoading) { e.currentTarget.style.background = '#f9fafb'; e.currentTarget.style.borderColor = '#9ca3af' } }}
+                onMouseLeave={(e: React.MouseEvent<HTMLButtonElement>) => { e.currentTarget.style.background = 'white'; e.currentTarget.style.borderColor = '#d1d5db' }}
+              >
+                <Fingerprint size={16} />
+                {t('login.passkey.signIn')}
+              </button>
             </>
           )}
 

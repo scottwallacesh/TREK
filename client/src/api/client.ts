@@ -261,6 +261,24 @@ export const authApi = {
     create: (name: string) => apiClient.post('/auth/mcp-tokens', { name } satisfies McpTokenCreateRequest).then(r => r.data),
     delete: (id: number) => apiClient.delete(`/auth/mcp-tokens/${id}`).then(r => r.data),
   },
+  passkey: {
+    registerOptions: (password: string) => apiClient.post('/auth/passkey/register/options', { password }).then(r => r.data),
+    registerVerify: (attestationResponse: unknown, name?: string) => apiClient.post('/auth/passkey/register/verify', { attestationResponse, name }).then(r => r.data),
+    loginOptions: () => apiClient.post('/auth/passkey/login/options', {}).then(r => r.data),
+    loginVerify: (assertionResponse: unknown) => apiClient.post('/auth/passkey/login/verify', { assertionResponse }).then(r => r.data as { token: string; user: Record<string, unknown> }),
+    list: () => apiClient.get('/auth/passkey/credentials').then(r => r.data as { credentials: PasskeyCredential[] }),
+    rename: (id: number, name: string) => apiClient.patch(`/auth/passkey/credentials/${id}`, { name }).then(r => r.data),
+    delete: (id: number, password: string) => apiClient.delete(`/auth/passkey/credentials/${id}`, { data: { password } }).then(r => r.data),
+  },
+}
+
+export interface PasskeyCredential {
+  id: number
+  name: string | null
+  device_type: string | null
+  backed_up: boolean
+  created_at: string
+  last_used_at: string | null
 }
 
 export const oauthApi = {
@@ -414,6 +432,7 @@ export const adminApi = {
   createUser: (data: Record<string, unknown>) => apiClient.post('/admin/users', data).then(r => r.data),
   updateUser: (id: number, data: Record<string, unknown>) => apiClient.put(`/admin/users/${id}`, data).then(r => r.data),
   deleteUser: (id: number) => apiClient.delete(`/admin/users/${id}`).then(r => r.data),
+  resetUserPasskeys: (id: number) => apiClient.delete(`/admin/users/${id}/passkeys`).then(r => r.data),
   stats: () => apiClient.get('/admin/stats').then(r => r.data),
   saveDemoBaseline: () => apiClient.post('/admin/save-demo-baseline').then(r => r.data),
   getOidc: () => apiClient.get('/admin/oidc').then(r => r.data),

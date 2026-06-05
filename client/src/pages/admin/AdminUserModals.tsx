@@ -2,7 +2,7 @@ import React from 'react'
 import { adminApi } from '../../api/client'
 import Modal from '../../components/shared/Modal'
 import CustomSelect from '../../components/shared/CustomSelect'
-import { CheckCircle, ArrowUpCircle, ExternalLink, RefreshCw, AlertTriangle } from 'lucide-react'
+import { CheckCircle, ArrowUpCircle, ExternalLink, RefreshCw, AlertTriangle, Fingerprint } from 'lucide-react'
 import type { TranslationFn } from '../../types'
 import type { useAdmin } from './useAdmin'
 
@@ -156,6 +156,25 @@ export default function AdminUserModals({ admin, t }: AdminUserModalsProps): Rea
                   { value: 'admin', label: t('settings.roleAdmin') },
                 ]}
               />
+            </div>
+            <div className="pt-3 border-t border-slate-100">
+              <p className="text-xs text-slate-400 mb-2">{t('admin.passkey.resetHint')}</p>
+              <button
+                type="button"
+                onClick={async () => {
+                  if (!editingUser) return
+                  if (!confirm(t('admin.passkey.resetConfirm', { name: editingUser.username }))) return
+                  try {
+                    const r = await adminApi.resetUserPasskeys(editingUser.id)
+                    toast.success(t('admin.passkey.resetDone', { count: r.deleted ?? 0 }))
+                  } catch {
+                    toast.error(t('common.error'))
+                  }
+                }}
+                className="flex items-center gap-2 px-3 py-2 text-sm text-red-600 border border-red-200 rounded-lg hover:bg-red-50"
+              >
+                <Fingerprint size={14} /> {t('admin.passkey.reset')}
+              </button>
             </div>
           </div>
         )}

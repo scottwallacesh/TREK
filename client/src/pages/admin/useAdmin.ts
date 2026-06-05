@@ -65,6 +65,13 @@ export function useAdmin() {
   const [oidcConfigured, setOidcConfigured] = useState<boolean>(false)
   const [requireMfa, setRequireMfa] = useState<boolean>(false)
 
+  // Passkey (WebAuthn) login
+  const [passkeyLogin, setPasskeyLogin] = useState<boolean>(false)
+  const [passkeyConfigured, setPasskeyConfigured] = useState<boolean>(false)
+  const [webauthnRpId, setWebauthnRpId] = useState<string>('')
+  const [webauthnOrigins, setWebauthnOrigins] = useState<string>('')
+  const [savingWebauthn, setSavingWebauthn] = useState<boolean>(false)
+
   // Invite links
   const [invites, setInvites] = useState<any[]>([])
   const [showCreateInvite, setShowCreateInvite] = useState<boolean>(false)
@@ -80,6 +87,8 @@ export function useAdmin() {
   useEffect(() => {
     apiClient.get('/auth/app-settings').then(r => {
       setSmtpValues(r.data || {})
+      if (r.data?.webauthn_rp_id) setWebauthnRpId(r.data.webauthn_rp_id)
+      if (r.data?.webauthn_origins) setWebauthnOrigins(r.data.webauthn_origins)
       setSmtpLoaded(true)
     }).catch(() => setSmtpLoaded(true))
   }, [])
@@ -141,6 +150,8 @@ export function useAdmin() {
       setEnvOverrideOidcOnly(config.env_override_oidc_only ?? false)
       setOidcConfigured(config.oidc_configured ?? false)
       if (config.require_mfa !== undefined) setRequireMfa(!!config.require_mfa)
+      setPasskeyLogin(!!config.passkey_login)
+      setPasskeyConfigured(!!config.passkey_configured)
       if (config.allowed_file_types) setAllowedFileTypes(config.allowed_file_types)
     } catch (err: unknown) {
       // ignore
@@ -176,6 +187,23 @@ export function useAdmin() {
     } catch (err: unknown) {
       setRequireMfa(!value)
       toast.error(getApiErrorMessage(err, t('common.error')))
+    }
+  }
+
+  const handleSaveWebauthn = async () => {
+    setSavingWebauthn(true)
+    try {
+      await authApi.updateAppSettings({
+        webauthn_rp_id: webauthnRpId.trim(),
+        webauthn_origins: webauthnOrigins.trim(),
+      })
+      // Re-read app-config so passkey_configured reflects the new RP ID.
+      await loadAppConfig()
+      toast.success(t('common.saved'))
+    } catch (err: unknown) {
+      toast.error(getApiErrorMessage(err, t('common.error')))
+    } finally {
+      setSavingWebauthn(false)
     }
   }
 
@@ -341,6 +369,8 @@ export function useAdmin() {
     oidcLogin, setOidcLogin, oidcRegistration, setOidcRegistration,
     envOverrideOidcOnly, setEnvOverrideOidcOnly, oidcConfigured, setOidcConfigured,
     requireMfa, setRequireMfa,
+    passkeyLogin, setPasskeyLogin, passkeyConfigured,
+    webauthnRpId, setWebauthnRpId, webauthnOrigins, setWebauthnOrigins, savingWebauthn, handleSaveWebauthn,
     invites, setInvites, showCreateInvite, setShowCreateInvite, inviteForm, setInviteForm,
     allowedFileTypes, setAllowedFileTypes, savingFileTypes, setSavingFileTypes,
     smtpValues, setSmtpValues, smtpLoaded,
