@@ -632,14 +632,16 @@ export default function CostsPanel({ tripId, tripMembers = [] }: CostsPanelProps
 
   function CategoryBreakdown() {
     const tot: Record<string, number> = {}
-    let grand = 0
-    for (const e of budgetItems) { const k = catMeta(e.category).key; tot[k] = (tot[k] || 0) + baseTotal(e); grand += baseTotal(e) }
+    for (const e of budgetItems) { const k = catMeta(e.category).key; tot[k] = (tot[k] || 0) + baseTotal(e) }
     const rows = COST_CATEGORY_LIST.filter(c => (tot[c.key] || 0) > 0).sort((a, b) => (tot[b.key] || 0) - (tot[a.key] || 0))
     if (rows.length === 0) return <div className="text-content-faint" style={{ fontSize: 12.5 }}>{t('costs.noCategories')}</div>
+    // Bars are scaled relative to the most expensive category (the top row fills the
+    // bar), not to the trip grand total — makes the relative ranking readable.
+    const maxCat = Math.max(0, ...rows.map(c => tot[c.key] || 0))
     return (
       <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
         {rows.map(c => {
-          const v = tot[c.key]; const pct = grand ? v / grand * 100 : 0
+          const v = tot[c.key]; const pct = maxCat ? v / maxCat * 100 : 0
           return (
             <div key={c.key} style={{ display: 'grid', gridTemplateColumns: 'auto 1fr auto', gap: 10, alignItems: 'center' }}>
               <span style={{ width: 10, height: 10, borderRadius: 3, background: c.color }} />
