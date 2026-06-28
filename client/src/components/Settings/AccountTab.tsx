@@ -9,6 +9,7 @@ import { getApiErrorMessage } from '../../types'
 import type { UserWithOidc } from '../../types'
 import Section from './Section'
 import PasskeysSection from './PasskeysSection'
+import { CalendarSyncSection } from './CalendarSyncSection';
 
 const MFA_BACKUP_SESSION_KEY = 'trek_mfa_backup_codes_pending'
 
@@ -59,6 +60,10 @@ export default function AccountTab(): React.ReactElement {
     (searchParams.get('mfa') === 'required' || appRequireMfa)
 
   const backupCodesText = backupCodes?.join('\n') || ''
+
+  // Calendar sync
+  const currentUser = useAuthStore((state) => state.user);
+  const updateUser = useAuthStore((state) => state.setUser);
 
   useEffect(() => {
     if (!user?.mfa_enabled || backupCodes) return
@@ -500,6 +505,16 @@ export default function AccountTab(): React.ReactElement {
           </button>
         </div>
       </Section>
+
+      {/* Calendar sync */}
+      <CalendarSyncSection
+        currentUser={currentUser}
+        onTokenUpdate={(newToken) => {
+          if (currentUser) {
+            updateUser({ ...currentUser, calendar_token: newToken });
+          }
+        }}
+      />
 
       {/* Delete Account Blocked */}
       {showDeleteConfirm === 'blocked' && (

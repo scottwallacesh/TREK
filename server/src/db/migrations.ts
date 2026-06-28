@@ -25,9 +25,9 @@ export function trimUserWhitespace(db: Database.Database): boolean {
       hadCollision = true;
       console.warn(
         `[migration] WHITESPACE COLLISION username: user id=${row.id} ` +
-          `original=${JSON.stringify(row.username)} trimmed="${trimmed}" ` +
-          `collides with user id=${collision.id}. Renamed to "${final}". ` +
-          `Manual review required.`,
+        `original=${JSON.stringify(row.username)} trimmed="${trimmed}" ` +
+        `collides with user id=${collision.id}. Renamed to "${final}". ` +
+        `Manual review required.`,
       );
     } else {
       console.warn(
@@ -53,9 +53,9 @@ export function trimUserWhitespace(db: Database.Database): boolean {
         at > 0 ? `${trimmed.slice(0, at)}__migrated_${row.id}${trimmed.slice(at)}` : `${trimmed}__migrated_${row.id}`;
       console.warn(
         `[migration] WHITESPACE COLLISION email: user id=${row.id} ` +
-          `original=${JSON.stringify(row.email)} trimmed="${trimmed}" ` +
-          `collides with user id=${collision.id}. Renamed to "${final}". ` +
-          `User cannot sign in with this email until manually corrected.`,
+        `original=${JSON.stringify(row.email)} trimmed="${trimmed}" ` +
+        `collides with user id=${collision.id}. Renamed to "${final}". ` +
+        `User cannot sign in with this email until manually corrected.`,
       );
     } else {
       console.warn(`[migration] Trimmed email for user id=${row.id}: ` + `${JSON.stringify(row.email)} → "${final}"`);
@@ -2700,7 +2700,7 @@ function runMigrations(db: Database.Database): void {
       `);
       db.exec(
         'CREATE INDEX IF NOT EXISTS idx_journey_entries_order ' +
-          'ON journey_entries(journey_id, entry_date, sort_order)',
+        'ON journey_entries(journey_id, entry_date, sort_order)',
       );
     },
     // Swap inverted start_day_id/end_day_id pairs in day_accommodations caused
@@ -3070,6 +3070,16 @@ function runMigrations(db: Database.Database): void {
       } catch (err: any) {
         if (!err.message?.includes('duplicate column name')) throw err;
       }
+    },
+    () => {
+      try {
+        db.exec('ALTER TABLE users ADD COLUMN calendar_token TEXT');
+      } catch (err: any) {
+        if (!err.message?.includes('duplicate column name')) throw err;
+      }
+      db.exec(
+        'CREATE UNIQUE INDEX IF NOT EXISTS idx_calendar_token ON users(calendar_token)',
+      );
     },
   ];
 

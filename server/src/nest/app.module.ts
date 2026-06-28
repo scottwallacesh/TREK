@@ -39,6 +39,7 @@ import { AddonsModule } from './addons/addons.module';
 import { TrekExceptionFilter } from './common/trek-exception.filter';
 import { SpaFallbackFilter } from './platform/spa-fallback.filter';
 import { IdempotencyInterceptor } from './common/idempotency.interceptor';
+import { CalendarModule } from './calendar/calendar.module';
 
 /**
  * Root NestJS module for the incremental migration. Domain modules
@@ -46,7 +47,7 @@ import { IdempotencyInterceptor } from './common/idempotency.interceptor';
  * migrated.
  */
 @Module({
-  imports: [DatabaseModule, WeatherModule, AirportsModule, ConfigModule, SystemNoticesModule, MapsModule, CategoriesModule, TagsModule, NotificationsModule, AtlasModule, VacayModule, PackingModule, TodoModule, BudgetModule, ReservationsModule, DaysModule, AssignmentsModule, PlacesModule, TripsModule, CollabModule, FilesModule, PhotosModule, MemoriesModule, AirtrailModule, JourneyModule, ShareModule, SettingsModule, BackupModule, AuthModule, OidcModule, OauthModule, AdminModule, AddonsModule, BookingImportModule],
+  imports: [DatabaseModule, WeatherModule, AirportsModule, ConfigModule, SystemNoticesModule, MapsModule, CategoriesModule, TagsModule, NotificationsModule, AtlasModule, VacayModule, PackingModule, TodoModule, BudgetModule, ReservationsModule, DaysModule, AssignmentsModule, PlacesModule, TripsModule, CollabModule, FilesModule, PhotosModule, MemoriesModule, AirtrailModule, JourneyModule, ShareModule, SettingsModule, BackupModule, AuthModule, OidcModule, OauthModule, AdminModule, AddonsModule, BookingImportModule, CalendarModule],
   controllers: [HealthController],
   providers: [
     HealthService,
